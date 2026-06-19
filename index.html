@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>CoproVigie — Signaler une anomalie</title>
+<meta name="description" content="Signalez en quelques clics une anomalie dans votre copropriété.">
+<meta name="theme-color" content="#1C2B2E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Archivo+Expanded:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ FOND DECORATIF ============ -->
+<div class="grain"></div>
+
+<!-- ============ LOADER ============ -->
+<div id="loader" class="loader">
+  <div class="loader-mark">
+    <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+      <rect x="2" y="2" width="52" height="52" rx="10" stroke="currentColor" stroke-width="3"/>
+      <path d="M28 16v16M28 40v.1" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <p>Chargement…</p>
+</div>
+
+<!-- ============ APP ROOT ============ -->
+<div id="app" class="app" hidden>
+
+  <!-- ---------- TOPBAR (visible une fois connecté) ---------- -->
+  <header id="topbar" class="topbar" hidden>
+    <div class="topbar-left">
+      <span class="topbar-mark">◆</span>
+      <div class="topbar-id">
+        <strong id="topbarCopro">—</strong>
+        <span id="topbarGroup">—</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="topbarUser" class="topbar-user"></span>
+      <button id="btnAdminToggle" class="btn-ghost btn-small" hidden>Admin</button>
+      <button id="btnLogout" class="btn-ghost btn-small">Quitter</button>
+    </div>
+  </header>
+
+  <!-- =====================================================
+       ECRAN 0 — ACCUEIL / CHOIX
+  ====================================================== -->
+  <section id="screenWelcome" class="screen screen-center">
+    <div class="welcome-mark">
+      <svg width="64" height="64" viewBox="0 0 56 56" fill="none">
+        <rect x="2" y="2" width="52" height="52" rx="10" stroke="currentColor" stroke-width="3"/>
+        <path d="M28 16v16M28 40v.1" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <p class="eyebrow">Carnet de bord d'immeuble</p>
+    <h1 class="hero-title">Copro<span>Vigie</span></h1>
+    <p class="welcome-sub">Signalez une panne, une casse ou un danger dans votre copropriété en quelques clics. Tout le monde voit, tout de suite, ce qui ne va pas.</p>
+
+    <div class="welcome-actions">
+      <button id="btnGoJoin" class="btn-primary btn-large">
+        <span>Rejoindre ma copropriété</span>
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 9h10M10 5l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button id="btnGoCreate" class="btn-outline btn-large">Créer une copropriété</button>
+    </div>
+    <button id="btnGoAdminLogin" class="link-muted">J'administre déjà une copropriété →</button>
+  </section>
+
+  <!-- =====================================================
+       ECRAN 1 — REJOINDRE (résident)
+  ====================================================== -->
+  <section id="screenJoin" class="screen screen-center" hidden>
+    <button class="btn-back" data-back="screenWelcome">← Retour</button>
+    <p class="eyebrow">Rejoindre</p>
+    <h2 class="screen-title">Entrez dans l'immeuble</h2>
+    <p class="screen-sub">Le code d'accès vous a été communiqué par votre syndic ou conseil syndical.</p>
+
+    <form id="formJoin" class="stack-form">
+      <label class="field">
+        <span class="field-label">Code d'accès de la copropriété</span>
+        <input id="joinCode" type="text" inputmode="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
+      </label>
+      <label class="field">
+        <span class="field-label">Votre pseudo</span>
+        <input id="joinPseudo" type="text" autocomplete="off" placeholder="Ex. Marie, Appt 14" required class="input" maxlength="30">
+      </label>
+      <p id="joinError" class="form-error" hidden></p>
+      <button type="submit" class="btn-primary btn-large btn-full">
+        <span>Entrer</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+    </form>
+  </section>
+
+  <!-- =====================================================
+       ECRAN 2 — CREER UNE COPROPRIETE
+  ====================================================== -->
+  <section id="screenCreate" class="screen screen-center" hidden>
+    <button class="btn-back" data-back="screenWelcome">← Retour</button>
+    <p class="eyebrow">Nouvelle copropriété</p>
+    <h2 class="screen-title">Créez l'espace de votre immeuble</h2>
+    <p class="screen-sub">Vous devenez l'administrateur. Vous pourrez ensuite inviter les résidents avec un code d'accès.</p>
+
+    <form id="formCreate" class="stack-form">
+      <label class="field">
+        <span class="field-label">Nom de la copropriété / immeuble</span>
+        <input id="createName" type="text" autocomplete="off" placeholder="Ex. Résidence Les Lilas" required class="input" maxlength="60">
+      </label>
+      <label class="field">
+        <span class="field-label">Code d'accès résidents (modifiable plus tard)</span>
+        <input id="createCode" type="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
+      </label>
+      <label class="field">
+        <span class="field-label">Mot de passe administrateur</span>
+        <input id="createAdminPass" type="password" autocomplete="new-password" placeholder="Au moins 6 caractères" required class="input" minlength="6">
+      </label>
+      <label class="field">
+        <span class="field-label">Votre pseudo (admin)</span>
+        <input id="createPseudo" type="text" autocomplete="off" placeholder="Ex. Jean, gardien" required class="input" maxlength="30">
+      </label>
+      <p id="createError" class="form-error" hidden></p>
+      <button type="submit" class="btn-primary btn-large btn-full">
+        <span>Créer la copropriété</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+    </form>
+  </section>
+
+  <!-- =====================================================
+       ECRAN 3 — CONNEXION ADMIN (pour admin déjà créé)
+  ====================================================== -->
+  <section id="screenAdminLogin" class="screen screen-center" hidden>
+    <button class="btn-back" data-back="screenWelcome">← Retour</button>
+    <p class="eyebrow">Espace administrateur</p>
+    <h2 class="screen-title">Gérer ma copropriété</h2>
+    <p class="screen-sub">Identifiez-vous avec le nom de la copropriété et le mot de passe administrateur.</p>
+
+    <form id="formAdminLogin" class="stack-form">
+      <label class="field">
+        <span class="field-label">Code d'accès de la copropriété</span>
+        <input id="adminLoginCode" type="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
+      </label>
+      <label class="field">
+        <span class="field-label">Mot de passe administrateur</span>
+        <input id="adminLoginPass" type="password" autocomplete="current-password" required class="input">
+      </label>
+      <p id="adminLoginError" class="form-error" hidden></p>
+      <button type="submit" class="btn-primary btn-large btn-full">
+        <span>Accéder à l'administration</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+    </form>
+  </section>
+
+  <!-- =====================================================
+       ECRAN 4 — TABLEAU DE BORD RESIDENT
+  ====================================================== -->
+  <section id="screenDashboard" class="screen" hidden>
+
+    <div class="dash-head">
+      <div>
+        <p class="eyebrow">Signaler</p>
+        <h2 class="screen-title">Que se passe-t-il ?</h2>
+      </div>
+      <label class="group-select-wrap">
+        <span class="field-label">Lieu concerné</span>
+        <select id="groupSelect" class="input select"></select>
+      </label>
+    </div>
+
+    <div id="typeGrid" class="type-grid"></div>
+
+    <div class="dash-divider">
+      <span>Signalements récents</span>
+    </div>
+
+    <div class="filter-row">
+      <button class="chip chip-active" data-filter="all">Tous</button>
+      <button class="chip" data-filter="reported">Signalés</button>
+      <button class="chip" data-filter="in_progress">En cours</button>
+      <button class="chip" data-filter="resolved">Résolus</button>
+    </div>
+
+    <div id="reportsList" class="reports-list">
+      <p class="empty-state">Chargement des signalements…</p>
+    </div>
+  </section>
+
+  <!-- =====================================================
+       ECRAN 5 — ADMINISTRATION
+  ====================================================== -->
+  <section id="screenAdmin" class="screen" hidden>
+    <div class="dash-head">
+      <div>
+        <p class="eyebrow">Administration</p>
+        <h2 class="screen-title">Gérer la copropriété</h2>
+      </div>
+      <button id="btnBackToDash" class="btn-outline btn-small">← Vue résident</button>
+    </div>
+
+    <nav class="admin-tabs">
+      <button class="admin-tab admin-tab-active" data-tab="tabReports">Signalements</button>
+      <button class="admin-tab" data-tab="tabGroups">Lieux / Sous-groupes</button>
+      <button class="admin-tab" data-tab="tabTypes">Types d'incidents</button>
+      <button class="admin-tab" data-tab="tabSettings">Réglages</button>
+    </nav>
+
+    <!-- TAB: signalements (admin) -->
+    <div id="tabReports" class="admin-tab-panel">
+      <div class="filter-row">
+        <button class="chip chip-active" data-afilter="all">Tous</button>
+        <button class="chip" data-afilter="reported">Signalés</button>
+        <button class="chip" data-afilter="in_progress">En cours</button>
+        <button class="chip" data-afilter="resolved">Résolus</button>
+      </div>
+      <div id="adminReportsList" class="reports-list">
+        <p class="empty-state">Chargement…</p>
+      </div>
+    </div>
+
+    <!-- TAB: groupes -->
+    <div id="tabGroups" class="admin-tab-panel" hidden>
+      <form id="formAddGroup" class="inline-form">
+        <input id="newGroupName" type="text" class="input" placeholder="Ex. Bâtiment A, Porte 12, Parking sous-sol" maxlength="40" required>
+        <button type="submit" class="btn-primary">Ajouter</button>
+      </form>
+      <ul id="groupsAdminList" class="manage-list"></ul>
+    </div>
+
+    <!-- TAB: types -->
+    <div id="tabTypes" class="admin-tab-panel" hidden>
+      <form id="formAddType" class="inline-form inline-form-type">
+        <input id="newTypeName" type="text" class="input" placeholder="Ex. Interphone, Boîtes aux lettres" maxlength="30" required>
+        <select id="newTypeIcon" class="input select select-icon"></select>
+        <button type="submit" class="btn-primary">Ajouter</button>
+      </form>
+      <ul id="typesAdminList" class="manage-list"></ul>
+    </div>
+
+    <!-- TAB: réglages -->
+    <div id="tabSettings" class="admin-tab-panel" hidden>
+      <div class="settings-card">
+        <h3>Identité de la copropriété</h3>
+        <form id="formSettingsName" class="inline-form">
+          <input id="settingsName" type="text" class="input" maxlength="60" required>
+          <button type="submit" class="btn-outline">Enregistrer</button>
+        </form>
+      </div>
+      <div class="settings-card">
+        <h3>Code d'accès résidents</h3>
+        <p class="settings-help">Changer ce code n'affecte pas les résidents déjà connectés. Seules les nouvelles connexions devront utiliser le nouveau code.</p>
+        <form id="formSettingsCode" class="inline-form">
+          <input id="settingsCode" type="text" class="input input-code" maxlength="40" required>
+          <button type="submit" class="btn-outline">Mettre à jour</button>
+        </form>
+      </div>
+      <div class="settings-card settings-danger">
+        <h3>Mot de passe administrateur</h3>
+        <form id="formSettingsPass" class="inline-form">
+          <input id="settingsPass" type="password" class="input" placeholder="Nouveau mot de passe (6 car. min.)" minlength="6">
+          <button type="submit" class="btn-outline">Changer</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ MODALE: nouveau signalement ============ -->
+<div id="reportModal" class="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
+    <button class="modal-close" id="modalClose" aria-label="Fermer">✕</button>
+    <div class="modal-icon" id="modalIcon"></div>
+    <h3 id="reportModalTitle">Signaler</h3>
+    <p class="modal-sub" id="modalSub"></p>
+    <form id="formReport">
+      <label class="field">
+        <span class="field-label">Commentaire (facultatif)</span>
+        <textarea id="reportComment" class="input textarea" rows="3" maxlength="500" placeholder="Précisez si besoin : étage, gravité, depuis quand…"></textarea>
+      </label>
+      <button type="submit" class="btn-primary btn-large btn-full">
+        <span>Confirmer le signalement</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ MODALE: détail signalement ============ -->
+<div id="detailModal" class="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <button class="modal-close" id="detailModalClose" aria-label="Fermer">✕</button>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<!-- ============ TOAST ============ -->
+<div id="toast" class="toast" hidden></div>
+
+<!-- ============ APPLICATION ============ -->
+<script type="module" src="app.js"></script>
+</body>
+</html>
