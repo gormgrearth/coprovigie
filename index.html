@@ -9,7 +9,483 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Archivo+Expanded:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<style>
+/* =========================================================
+   COPROVIGIE — design tokens
+   Inspiré des plaques de signalétique d'immeuble, carnets
+   d'entretien et tableaux de bord de gardien.
+========================================================= */
+:root{
+  --paper:        #F7F5F0;
+  --paper-raised: #FFFFFF;
+  --ink:          #1C2B2E;
+  --ink-soft:     #44545A;
+  --meta:         #5C6B6E;
+  --line:         #DDD8CC;
+  --line-soft:    #E8E4D9;
+
+  --signal:       #D6593B;
+  --signal-dark:  #B5432A;
+  --signal-tint:  #FBE6DF;
+
+  --ok:           #3D7A5C;
+  --ok-tint:      #E1EFE6;
+
+  --warn:         #C8861A;
+  --warn-tint:    #FBEDD5;
+
+  --display: 'Archivo Expanded', 'Archivo', sans-serif;
+  --body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-s: 8px;
+  --radius-m: 14px;
+  --radius-l: 22px;
+  --shadow-card: 0 1px 2px rgba(28,43,46,.04), 0 4px 14px rgba(28,43,46,.06);
+  --shadow-pop: 0 12px 32px rgba(28,43,46,.16), 0 4px 10px rgba(28,43,46,.08);
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--body);
+  -webkit-font-smoothing:antialiased;
+  line-height:1.5;
+}
+button, input, textarea, select{ font-family:inherit; }
+button{ cursor:pointer; }
+ul{ list-style:none; margin:0; padding:0; }
+h1,h2,h3{ margin:0; }
+::selection{ background:var(--signal); color:#fff; }
+
+/* subtle paper grain */
+.grain{
+  position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.35;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(28,43,46,.025) 0, transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(28,43,46,.02) 0, transparent 45%);
+}
+
+:focus-visible{
+  outline: 3px solid var(--signal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{ animation-duration:.001ms !important; transition-duration:.001ms !important; }
+}
+
+/* =========================================================
+   LOADER
+========================================================= */
+.loader{
+  position:fixed; inset:0; z-index:50;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; background:var(--paper); color:var(--ink);
+}
+.loader-mark{ animation: pulse 1.6s ease-in-out infinite; }
+.loader p{ font-family:var(--mono); font-size:13px; color:var(--meta); letter-spacing:.03em; }
+@keyframes pulse{
+  0%,100%{ opacity:.35; transform:scale(.96); }
+  50%{ opacity:1; transform:scale(1); }
+}
+
+/* =========================================================
+   APP SHELL
+========================================================= */
+.app{
+  position:relative; z-index:1;
+  min-height:100%;
+  display:flex; flex-direction:column;
+}
+
+.topbar{
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 20px;
+  background:rgba(247,245,240,.92);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+.topbar-left{ display:flex; align-items:center; gap:10px; min-width:0; }
+.topbar-mark{ color:var(--signal); font-size:20px; line-height:1; }
+.topbar-id{ display:flex; flex-direction:column; min-width:0; }
+.topbar-id strong{
+  font-family:var(--display); font-weight:700; font-size:15px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:46vw;
+}
+.topbar-id span{ font-size:11px; color:var(--meta); font-family:var(--mono); }
+.topbar-right{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.topbar-user{
+  font-size:13px; color:var(--ink-soft); font-weight:600;
+  display:none;
+}
+@media(min-width:560px){ .topbar-user{ display:inline; } }
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+.btn-primary, .btn-outline, .btn-ghost{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  border-radius:var(--radius-m);
+  font-weight:700; font-size:15px;
+  border:2px solid transparent;
+  padding:13px 22px;
+  transition:transform .12s ease, background .15s ease, border-color .15s ease, opacity .15s ease;
+  white-space:nowrap;
+}
+.btn-primary{
+  background:var(--ink); color:var(--paper);
+}
+.btn-primary:hover{ background:var(--signal-dark); }
+.btn-primary:active{ transform:scale(.97); }
+.btn-primary:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
+
+.btn-outline{
+  background:transparent; color:var(--ink); border-color:var(--ink);
+}
+.btn-outline:hover{ background:var(--ink); color:var(--paper); }
+
+.btn-ghost{
+  background:transparent; color:var(--ink-soft); border-color:transparent;
+  font-weight:600;
+}
+.btn-ghost:hover{ background:var(--line-soft); color:var(--ink); }
+
+.btn-large{ padding:16px 26px; font-size:16px; border-radius:var(--radius-m); }
+.btn-small{ padding:8px 14px; font-size:13px; border-radius:var(--radius-s); }
+.btn-full{ width:100%; }
+
+.btn-back{
+  align-self:flex-start;
+  background:none; border:none; color:var(--meta);
+  font-weight:600; font-size:14px; padding:6px 0; margin-bottom:8px;
+}
+.btn-back:hover{ color:var(--ink); }
+
+.link-muted{
+  background:none; border:none; color:var(--meta);
+  font-size:14px; font-weight:600; margin-top:22px;
+  border-bottom:1px solid transparent;
+}
+.link-muted:hover{ color:var(--ink); border-color:var(--ink); }
+
+.btn-spinner{
+  width:14px; height:14px; border-radius:50%;
+  border:2px solid rgba(255,255,255,.4); border-top-color:#fff;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
+/* =========================================================
+   SCREENS
+========================================================= */
+.screen{
+  flex:1;
+  width:100%;
+  max-width:720px;
+  margin:0 auto;
+  padding:28px 20px 64px;
+  animation: fadeUp .35s ease both;
+}
+@keyframes fadeUp{
+  from{ opacity:0; transform:translateY(10px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+.screen-center{
+  display:flex; flex-direction:column; align-items:flex-start;
+  justify-content:center;
+  min-height:90vh;
+}
+#screenWelcome.screen-center{ align-items:center; text-align:center; }
+
+.eyebrow{
+  font-family:var(--mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--signal); font-weight:500; margin:0 0 10px;
+}
+.hero-title{
+  font-family:var(--display); font-weight:800; font-size:clamp(40px,9vw,64px);
+  letter-spacing:-.01em; color:var(--ink); margin-bottom:14px;
+}
+.hero-title span{ color:var(--signal); }
+.welcome-mark{ color:var(--ink); margin-bottom:18px; }
+.welcome-sub{
+  max-width:440px; color:var(--ink-soft); font-size:16px; margin-bottom:34px;
+}
+.welcome-actions{
+  display:flex; flex-direction:column; gap:12px; width:100%; max-width:340px;
+}
+
+.screen-title{
+  font-family:var(--display); font-weight:700; font-size:clamp(26px,5vw,34px);
+  margin-bottom:10px;
+}
+.screen-sub{ color:var(--ink-soft); font-size:15px; margin-bottom:28px; max-width:480px; }
+
+/* =========================================================
+   FORMS
+========================================================= */
+.stack-form{ display:flex; flex-direction:column; gap:18px; width:100%; max-width:420px; }
+.field{ display:flex; flex-direction:column; gap:7px; }
+.field-label{ font-size:13px; font-weight:600; color:var(--ink-soft); }
+
+.input{
+  width:100%;
+  border:2px solid var(--line);
+  background:var(--paper-raised);
+  border-radius:var(--radius-s);
+  padding:13px 14px;
+  font-size:16px;
+  color:var(--ink);
+  transition:border-color .15s ease;
+}
+.input:focus{ border-color:var(--ink); outline:none; }
+.input-code{ font-family:var(--mono); letter-spacing:.04em; text-transform:uppercase; }
+.input-code::placeholder{ text-transform:none; }
+.textarea{ resize:vertical; font-size:15px; }
+.select{ appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%231C2B2E' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center; padding-right:38px; }
+
+.form-error{
+  background:var(--signal-tint); color:var(--signal-dark);
+  border-radius:var(--radius-s); padding:10px 12px; font-size:13.5px; font-weight:600;
+  margin:0;
+}
+
+/* =========================================================
+   DASHBOARD
+========================================================= */
+.dash-head{
+  display:flex; align-items:flex-end; justify-content:space-between; gap:16px;
+  flex-wrap:wrap;
+  margin-bottom:22px;
+}
+.group-select-wrap{ display:flex; flex-direction:column; gap:6px; min-width:200px; }
+.group-select-wrap .field-label{ font-size:12px; }
+.group-select-wrap .select{ padding:10px 36px 10px 12px; font-size:14px; font-weight:600; }
+
+.type-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(108px,1fr));
+  gap:12px;
+  margin-bottom:8px;
+}
+.type-btn{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:8px;
+  background:var(--paper-raised);
+  border:2px solid var(--line);
+  border-radius:var(--radius-l);
+  padding:18px 10px 14px;
+  font-weight:700; font-size:13.5px; color:var(--ink);
+  box-shadow:var(--shadow-card);
+  transition:transform .12s ease, border-color .15s ease, box-shadow .15s ease;
+  text-align:center;
+}
+.type-btn:hover{ border-color:var(--signal); transform:translateY(-2px); }
+.type-btn:active{ transform:scale(.96); }
+.type-btn .ic{ font-size:26px; line-height:1; }
+
+.dash-divider{
+  display:flex; align-items:center; gap:12px;
+  margin:32px 0 16px;
+  color:var(--meta); font-size:13px; font-weight:600;
+  text-transform:uppercase; letter-spacing:.04em;
+}
+.dash-divider::after{ content:''; flex:1; height:1px; background:var(--line); }
+
+.filter-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; }
+.chip{
+  border:2px solid var(--line); background:var(--paper-raised);
+  border-radius:999px; padding:7px 16px; font-size:13px; font-weight:600;
+  color:var(--ink-soft);
+  transition: all .15s ease;
+}
+.chip:hover{ border-color:var(--ink); }
+.chip-active{ background:var(--ink); border-color:var(--ink); color:var(--paper); }
+
+/* =========================================================
+   REPORTS LIST
+========================================================= */
+.reports-list{ display:flex; flex-direction:column; gap:10px; }
+.empty-state{
+  color:var(--meta); font-size:14px; text-align:center;
+  padding:36px 20px; background:var(--paper-raised); border-radius:var(--radius-m);
+  border:1.5px dashed var(--line);
+}
+.report-card{
+  display:flex; align-items:flex-start; gap:14px;
+  background:var(--paper-raised);
+  border:1.5px solid var(--line-soft);
+  border-radius:var(--radius-m);
+  padding:14px 16px;
+  box-shadow:var(--shadow-card);
+  text-align:left;
+  width:100%;
+  transition: border-color .15s ease;
+}
+.report-card:hover{ border-color:var(--line); }
+.report-ic{
+  width:38px; height:38px; flex-shrink:0;
+  border-radius:10px; background:var(--signal-tint); color:var(--signal-dark);
+  display:flex; align-items:center; justify-content:center; font-size:19px;
+}
+.report-body{ flex:1; min-width:0; }
+.report-top{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:3px; }
+.report-title{ font-weight:700; font-size:14.5px; }
+.report-group{ font-size:12px; color:var(--meta); font-family:var(--mono); }
+.report-meta{ font-size:12px; color:var(--meta); margin-bottom:5px; font-family:var(--mono); }
+.report-comment{ font-size:13.5px; color:var(--ink-soft); }
+.report-author{ font-size:12px; color:var(--meta); margin-top:4px; }
+
+.status-badge{
+  flex-shrink:0;
+  font-size:11px; font-weight:700; padding:5px 10px; border-radius:999px;
+  text-transform:uppercase; letter-spacing:.03em;
+}
+.status-reported{ background:var(--signal-tint); color:var(--signal-dark); }
+.status-in_progress{ background:var(--warn-tint); color:var(--warn); }
+.status-resolved{ background:var(--ok-tint); color:var(--ok); }
+
+/* =========================================================
+   ADMIN
+========================================================= */
+.admin-tabs{
+  display:flex; gap:4px; margin-bottom:24px;
+  border-bottom:2px solid var(--line);
+  overflow-x:auto;
+}
+.admin-tab{
+  background:none; border:none; padding:10px 16px;
+  font-weight:700; font-size:14px; color:var(--meta);
+  border-bottom:3px solid transparent; margin-bottom:-2px;
+  white-space:nowrap;
+}
+.admin-tab:hover{ color:var(--ink); }
+.admin-tab-active{ color:var(--ink); border-color:var(--signal); }
+
+.inline-form{ display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap; }
+.inline-form .input{ flex:1; min-width:160px; }
+.inline-form-type .input{ min-width:140px; }
+.select-icon{ max-width:100px; flex:0 0 auto; }
+
+.manage-list{ display:flex; flex-direction:column; gap:8px; }
+.manage-item{
+  display:flex; align-items:center; gap:12px;
+  background:var(--paper-raised); border:1.5px solid var(--line-soft);
+  border-radius:var(--radius-s); padding:11px 14px;
+}
+.manage-item .mi-ic{ font-size:18px; width:24px; text-align:center; }
+.manage-item .mi-name{ flex:1; font-weight:600; font-size:14px; }
+.manage-item .mi-del{
+  background:none; border:none; color:var(--meta); font-size:13px; font-weight:600;
+  padding:4px 8px; border-radius:6px;
+}
+.manage-item .mi-del:hover{ color:var(--signal-dark); background:var(--signal-tint); }
+
+.settings-card{
+  background:var(--paper-raised); border:1.5px solid var(--line-soft);
+  border-radius:var(--radius-m); padding:18px 20px; margin-bottom:16px;
+}
+.settings-card h3{ font-family:var(--display); font-size:16px; margin-bottom:10px; }
+.settings-help{ font-size:13px; color:var(--meta); margin:0 0 12px; }
+.settings-danger{ border-color:var(--signal-tint); }
+
+/* =========================================================
+   MODALS
+========================================================= */
+.modal-overlay{
+  position:fixed; inset:0; z-index:40;
+  background:rgba(28,43,46,.5);
+  backdrop-filter:blur(2px);
+  display:flex; align-items:flex-end; justify-content:center;
+  animation: fadeIn .2s ease both;
+}
+@media(min-width:600px){ .modal-overlay{ align-items:center; } }
+@keyframes fadeIn{ from{ opacity:0; } to{ opacity:1; } }
+
+.modal{
+  position:relative;
+  background:var(--paper);
+  width:100%; max-width:480px;
+  max-height:90vh; overflow-y:auto;
+  border-radius:24px 24px 0 0;
+  padding:28px 24px 32px;
+  box-shadow:var(--shadow-pop);
+  animation: slideUp .25s cubic-bezier(.2,.8,.3,1) both;
+}
+@media(min-width:600px){ .modal{ border-radius:var(--radius-l); } }
+@keyframes slideUp{ from{ transform:translateY(24px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+
+.modal-close{
+  position:absolute; top:16px; right:16px;
+  width:32px; height:32px; border-radius:50%;
+  background:var(--line-soft); border:none; color:var(--ink-soft); font-size:14px;
+}
+.modal-close:hover{ background:var(--line); color:var(--ink); }
+
+.modal-icon{
+  width:52px; height:52px; border-radius:14px;
+  background:var(--signal-tint); color:var(--signal-dark);
+  display:flex; align-items:center; justify-content:center; font-size:26px;
+  margin-bottom:14px;
+}
+.modal h3{ font-family:var(--display); font-size:21px; margin-bottom:4px; }
+.modal-sub{ font-size:13px; color:var(--meta); font-family:var(--mono); margin-bottom:18px; }
+.modal form{ display:flex; flex-direction:column; gap:16px; }
+
+/* detail modal */
+.detail-status-row{ display:flex; gap:8px; margin:16px 0; flex-wrap:wrap; }
+.detail-status-btn{
+  flex:1; min-width:90px;
+  border:2px solid var(--line); background:var(--paper-raised);
+  border-radius:var(--radius-s); padding:10px 8px;
+  font-size:12.5px; font-weight:700; color:var(--ink-soft);
+}
+.detail-status-btn.active.status-reported{ border-color:var(--signal); background:var(--signal-tint); color:var(--signal-dark); }
+.detail-status-btn.active.status-in_progress{ border-color:var(--warn); background:var(--warn-tint); color:var(--warn); }
+.detail-status-btn.active.status-resolved{ border-color:var(--ok); background:var(--ok-tint); color:var(--ok); }
+.detail-meta-block{ font-size:13px; color:var(--meta); margin:10px 0; line-height:1.7; }
+.detail-meta-block strong{ color:var(--ink); }
+.detail-comment-box{
+  background:var(--paper-raised); border:1.5px solid var(--line-soft);
+  border-radius:var(--radius-s); padding:13px 14px; font-size:14px; margin-top:6px;
+}
+
+/* =========================================================
+   TOAST
+========================================================= */
+.toast{
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+  background:var(--ink); color:var(--paper);
+  padding:13px 22px; border-radius:999px;
+  font-size:14px; font-weight:600;
+  box-shadow:var(--shadow-pop);
+  z-index:60;
+  animation: toastIn .25s cubic-bezier(.2,.8,.3,1) both;
+  max-width:90vw;
+}
+.toast.toast-error{ background:var(--signal-dark); }
+.toast.toast-success{ background:var(--ok); }
+@keyframes toastIn{
+  from{ opacity:0; transform:translate(-50%, 10px); }
+  to{ opacity:1; transform:translate(-50%, 0); }
+}
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+@media (max-width:480px){
+  .screen{ padding:22px 16px 56px; }
+  .type-grid{ grid-template-columns:repeat(auto-fill, minmax(92px,1fr)); gap:10px; }
+  .type-btn{ padding:14px 6px 12px; }
+  .topbar{ padding:12px 14px; }
+}
+
+</style>
 </head>
 <body>
 
@@ -302,6 +778,866 @@
 <div id="toast" class="toast" hidden></div>
 
 <!-- ============ APPLICATION ============ -->
-<script type="module" src="app.js"></script>
+<script type="module">
+// =========================================================
+// COPROVIGIE — app.js
+// Logique applicative : auth légère par code, Firestore CRUD,
+// navigation entre écrans, gestion admin.
+// =========================================================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+import {
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc,
+  updateDoc, deleteDoc, query, where, orderBy, onSnapshot,
+  serverTimestamp, Timestamp
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+// --- Configuration Firebase (renseignée automatiquement depuis firebase-config.js) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyA-Qj8Gs1q1YQyCl4_fsXr1B6AiSENgBxQ",
+  authDomain: "coprovigie.firebaseapp.com",
+  projectId: "coprovigie",
+  storageBucket: "coprovigie.firebasestorage.app",
+  messagingSenderId: "554531936535",
+  appId: "1:554531936535:web:d7daab50ae5a6ac05b3f52"
+};
+
+
+
+// ---------------------------------------------------------
+// INIT FIREBASE
+// ---------------------------------------------------------
+let app, db;
+let firebaseReady = false;
+try{
+  app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+  firebaseReady = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "VOTRE_API_KEY";
+}catch(e){
+  console.error("Firebase init error", e);
+}
+
+// ---------------------------------------------------------
+// CONSTANTES
+// ---------------------------------------------------------
+const DEFAULT_TYPES = [
+  { name: "Ascenseur",     icon: "🛗" },
+  { name: "Électricité",   icon: "⚡" },
+  { name: "Chauffage",     icon: "🔥" },
+  { name: "Éclairage",     icon: "💡" },
+  { name: "Accessibilité", icon: "♿" },
+  { name: "Eau / Fuite",   icon: "💧" },
+  { name: "Propreté",      icon: "🧹" },
+  { name: "Sécurité",      icon: "🔒" },
+];
+const ICON_CHOICES = ["🛗","⚡","🔥","💡","♿","💧","🧹","🔒","🚪","🪟","🗑️","📦","🐀","🌧️","🚗","📶","🔔","🧯","🏚️","❗"];
+const STATUS_LABELS = { reported: "Signalé", in_progress: "En cours", resolved: "Résolu" };
+
+// ---------------------------------------------------------
+// ETAT LOCAL (persisté dans localStorage)
+// ---------------------------------------------------------
+const LS_KEY = "coprovigie_session";
+let state = {
+  coproId: null,
+  coproName: null,
+  coproCode: null,
+  groupId: null,    // sous-groupe sélectionné pour signaler
+  pseudo: null,
+  isAdmin: false,
+  groups: [],
+  types: [],
+  reports: [],
+  filter: "all",
+  adminFilter: "all",
+  unsubReports: null,
+  unsubGroups: null,
+  unsubTypes: null,
+  pendingType: null, // type en cours de signalement (pour la modale)
+};
+
+function saveSession(){
+  localStorage.setItem(LS_KEY, JSON.stringify({
+    coproId: state.coproId,
+    coproName: state.coproName,
+    coproCode: state.coproCode,
+    pseudo: state.pseudo,
+    isAdmin: state.isAdmin,
+  }));
+}
+function loadSession(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){ return null; }
+}
+function clearSession(){
+  localStorage.removeItem(LS_KEY);
+}
+
+// ---------------------------------------------------------
+// HELPERS DOM
+// ---------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+function show(el){ el.hidden = false; }
+function hide(el){ el.hidden = true; }
+
+function showScreen(id){
+  document.querySelectorAll(".screen").forEach(s => hide(s));
+  show($(id));
+  window.scrollTo({ top:0, behavior:"smooth" });
+}
+
+function toast(msg, type=""){
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "toast" + (type ? " toast-" + type : "");
+  show(t);
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => hide(t), 3200);
+}
+
+function setBtnLoading(btn, loading){
+  const spinner = btn.querySelector(".btn-spinner");
+  btn.disabled = loading;
+  if(spinner) spinner.hidden = !loading;
+}
+
+function normalizeCode(code){
+  return (code || "").trim().toUpperCase().replace(/\s+/g, "-");
+}
+
+function formatDate(ts){
+  if(!ts) return "";
+  const d = ts instanceof Timestamp ? ts.toDate() : new Date(ts);
+  return d.toLocaleString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
+}
+
+function escapeHtml(str){
+  const div = document.createElement("div");
+  div.textContent = str ?? "";
+  return div.innerHTML;
+}
+
+// ---------------------------------------------------------
+// FIRESTORE PATHS
+// coprovigie/{coproId}                         -> doc copro (name, code, adminPass)
+// coprovigie/{coproId}/groups/{groupId}         -> sous-groupes
+// coprovigie/{coproId}/types/{typeId}           -> types d'incidents
+// coprovigie/{coproId}/reports/{reportId}       -> signalements
+// ---------------------------------------------------------
+const coproRef    = (id) => doc(db, "coprovigie", id);
+const groupsCol    = (id) => collection(db, "coprovigie", id, "groups");
+const typesCol     = (id) => collection(db, "coprovigie", id, "types");
+const reportsCol   = (id) => collection(db, "coprovigie", id, "reports");
+
+// =========================================================
+// NAVIGATION INITIALE
+// =========================================================
+// Note : ce script est chargé en type="module", donc il s'exécute
+// toujours APRES le DOMContentLoaded (comportement "defer" implicite).
+// On ne peut donc pas écouter cet événement (il ne se déclencherait
+// jamais) : on appelle init() directement, le DOM est déjà prêt.
+init();
+
+async function init(){
+  bindStaticEvents();
+
+  if(!firebaseReady){
+    hide($("loader"));
+    show($("app"));
+    showScreen("screenWelcome");
+    toast("Configuration Firebase manquante — voir firebase-config.js", "error");
+    return;
+  }
+
+  const session = loadSession();
+  hide($("loader"));
+  show($("app"));
+
+  if(session && session.coproId){
+    try{
+      const snap = await getDoc(coproRef(session.coproId));
+      if(snap.exists()){
+        const data = snap.data();
+        // vérifie que le pseudo/role est toujours valide (le code peut avoir changé,
+        // mais une session déjà ouverte reste valide tant que la copro existe)
+        state.coproId = session.coproId;
+        state.coproName = data.name;
+        state.coproCode = data.code;
+        state.pseudo = session.pseudo;
+        state.isAdmin = !!session.isAdmin;
+        saveSession();
+        enterCoproSpace();
+        return;
+      }
+    }catch(e){ console.error(e); }
+  }
+  showScreen("screenWelcome");
+}
+
+function bindStaticEvents(){
+  // Welcome
+  $("btnGoJoin").addEventListener("click", () => showScreen("screenJoin"));
+  $("btnGoCreate").addEventListener("click", () => showScreen("screenCreate"));
+  $("btnGoAdminLogin").addEventListener("click", () => showScreen("screenAdminLogin"));
+
+  document.querySelectorAll("[data-back]").forEach(btn => {
+    btn.addEventListener("click", () => showScreen(btn.dataset.back));
+  });
+
+  // Forms
+  $("formJoin").addEventListener("submit", onJoinSubmit);
+  $("formCreate").addEventListener("submit", onCreateSubmit);
+  $("formAdminLogin").addEventListener("submit", onAdminLoginSubmit);
+  $("formReport").addEventListener("submit", onReportSubmit);
+  $("formAddGroup").addEventListener("submit", onAddGroup);
+  $("formAddType").addEventListener("submit", onAddType);
+  $("formSettingsName").addEventListener("submit", onSettingsName);
+  $("formSettingsCode").addEventListener("submit", onSettingsCode);
+  $("formSettingsPass").addEventListener("submit", onSettingsPass);
+
+  // Topbar
+  $("btnLogout").addEventListener("click", logout);
+  $("btnAdminToggle").addEventListener("click", () => {
+    populateAdminScreen();
+    showScreen("screenAdmin");
+  });
+  $("btnBackToDash").addEventListener("click", () => showScreen("screenDashboard"));
+
+  // Modals
+  $("modalClose").addEventListener("click", () => hide($("reportModal")));
+  $("reportModal").addEventListener("click", (e) => { if(e.target.id === "reportModal") hide($("reportModal")); });
+  $("detailModalClose").addEventListener("click", () => hide($("detailModal")));
+  $("detailModal").addEventListener("click", (e) => { if(e.target.id === "detailModal") hide($("detailModal")); });
+
+  // Filters (dashboard)
+  document.querySelectorAll("#screenDashboard .chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll("#screenDashboard .chip").forEach(c => c.classList.remove("chip-active"));
+      chip.classList.add("chip-active");
+      state.filter = chip.dataset.filter;
+      renderReportsList();
+    });
+  });
+  // Filters (admin)
+  document.querySelectorAll("#tabReports .chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      document.querySelectorAll("#tabReports .chip").forEach(c => c.classList.remove("chip-active"));
+      chip.classList.add("chip-active");
+      state.adminFilter = chip.dataset.afilter;
+      renderAdminReportsList();
+    });
+  });
+
+  // Admin tabs
+  document.querySelectorAll(".admin-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".admin-tab").forEach(t => t.classList.remove("admin-tab-active"));
+      document.querySelectorAll(".admin-tab-panel").forEach(p => hide(p));
+      tab.classList.add("admin-tab-active");
+      show($(tab.dataset.tab));
+    });
+  });
+
+  // Group select changes which group new reports go to... actually it's a filter context
+  $("groupSelect").addEventListener("change", renderReportsList);
+
+  // populate icon select
+  const iconSelect = $("newTypeIcon");
+  ICON_CHOICES.forEach(ic => {
+    const opt = document.createElement("option");
+    opt.value = ic; opt.textContent = ic;
+    iconSelect.appendChild(opt);
+  });
+}
+
+// =========================================================
+// CREATION COPRO
+// =========================================================
+async function onCreateSubmit(e){
+  e.preventDefault();
+  const btn = e.target.querySelector("button[type=submit]");
+  const errEl = $("createError");
+  hide(errEl);
+
+  const name = $("createName").value.trim();
+  const code = normalizeCode($("createCode").value);
+  const adminPass = $("createAdminPass").value;
+  const pseudo = $("createPseudo").value.trim();
+
+  if(!name || !code || adminPass.length < 6 || !pseudo){
+    errEl.textContent = "Merci de remplir tous les champs (mot de passe : 6 caractères min.)";
+    show(errEl);
+    return;
+  }
+
+  setBtnLoading(btn, true);
+  try{
+    // vérifie l'unicité du code
+    const q = query(collection(db, "coprovigie"), where("code", "==", code));
+    const existing = await getDocs(q);
+    if(!existing.empty){
+      errEl.textContent = "Ce code d'accès est déjà utilisé. Choisissez-en un autre.";
+      show(errEl);
+      setBtnLoading(btn, false);
+      return;
+    }
+
+    const newCoproRef = doc(collection(db, "coprovigie"));
+    await setDoc(newCoproRef, {
+      name, code, adminPass,
+      createdAt: serverTimestamp(),
+    });
+
+    // types par défaut
+    for(const t of DEFAULT_TYPES){
+      await addDoc(typesCol(newCoproRef.id), { name: t.name, icon: t.icon, createdAt: serverTimestamp() });
+    }
+    // un groupe par défaut
+    await addDoc(groupsCol(newCoproRef.id), { name: "Bâtiment principal", createdAt: serverTimestamp() });
+
+    state.coproId = newCoproRef.id;
+    state.coproName = name;
+    state.coproCode = code;
+    state.pseudo = pseudo;
+    state.isAdmin = true;
+    saveSession();
+
+    toast("Copropriété créée avec succès !", "success");
+    enterCoproSpace();
+  }catch(err){
+    console.error(err);
+    errEl.textContent = "Une erreur est survenue. Réessayez.";
+    show(errEl);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+// =========================================================
+// REJOINDRE (résident)
+// =========================================================
+async function onJoinSubmit(e){
+  e.preventDefault();
+  const btn = e.target.querySelector("button[type=submit]");
+  const errEl = $("joinError");
+  hide(errEl);
+
+  const code = normalizeCode($("joinCode").value);
+  const pseudo = $("joinPseudo").value.trim();
+  if(!code || !pseudo){
+    errEl.textContent = "Merci de renseigner le code et votre pseudo.";
+    show(errEl);
+    return;
+  }
+
+  setBtnLoading(btn, true);
+  try{
+    const q = query(collection(db, "coprovigie"), where("code", "==", code));
+    const snap = await getDocs(q);
+    if(snap.empty){
+      errEl.textContent = "Code d'accès introuvable. Vérifiez auprès de votre syndic.";
+      show(errEl);
+      setBtnLoading(btn, false);
+      return;
+    }
+    const docSnap = snap.docs[0];
+    const data = docSnap.data();
+
+    state.coproId = docSnap.id;
+    state.coproName = data.name;
+    state.coproCode = data.code;
+    state.pseudo = pseudo;
+    state.isAdmin = false;
+    saveSession();
+
+    toast(`Bienvenue, ${pseudo} !`, "success");
+    enterCoproSpace();
+  }catch(err){
+    console.error(err);
+    errEl.textContent = "Une erreur est survenue. Réessayez.";
+    show(errEl);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+// =========================================================
+// CONNEXION ADMIN (espace déjà créé)
+// =========================================================
+async function onAdminLoginSubmit(e){
+  e.preventDefault();
+  const btn = e.target.querySelector("button[type=submit]");
+  const errEl = $("adminLoginError");
+  hide(errEl);
+
+  const code = normalizeCode($("adminLoginCode").value);
+  const pass = $("adminLoginPass").value;
+
+  setBtnLoading(btn, true);
+  try{
+    const q = query(collection(db, "coprovigie"), where("code", "==", code));
+    const snap = await getDocs(q);
+    if(snap.empty){
+      errEl.textContent = "Copropriété introuvable pour ce code.";
+      show(errEl);
+      setBtnLoading(btn, false);
+      return;
+    }
+    const docSnap = snap.docs[0];
+    const data = docSnap.data();
+    if(data.adminPass !== pass){
+      errEl.textContent = "Mot de passe administrateur incorrect.";
+      show(errEl);
+      setBtnLoading(btn, false);
+      return;
+    }
+
+    state.coproId = docSnap.id;
+    state.coproName = data.name;
+    state.coproCode = data.code;
+    state.pseudo = "Administrateur";
+    state.isAdmin = true;
+    saveSession();
+
+    toast("Connecté en tant qu'administrateur", "success");
+    enterCoproSpace();
+  }catch(err){
+    console.error(err);
+    errEl.textContent = "Une erreur est survenue. Réessayez.";
+    show(errEl);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+function logout(){
+  if(state.unsubReports) state.unsubReports();
+  if(state.unsubGroups) state.unsubGroups();
+  if(state.unsubTypes) state.unsubTypes();
+  clearSession();
+  state = { ...state, coproId:null, coproName:null, coproCode:null, pseudo:null, isAdmin:false, groups:[], types:[], reports:[] };
+  hide($("topbar"));
+  hide($("btnAdminToggle"));
+  showScreen("screenWelcome");
+}
+
+// =========================================================
+// ENTREE DANS L'ESPACE COPRO
+// =========================================================
+function enterCoproSpace(){
+  $("topbarCopro").textContent = state.coproName;
+  $("topbarGroup").textContent = state.isAdmin ? "Administration" : `Code : ${state.coproCode}`;
+  $("topbarUser").textContent = state.pseudo;
+  show($("topbar"));
+  if(state.isAdmin) show($("btnAdminToggle")); else hide($("btnAdminToggle"));
+
+  listenGroups();
+  listenTypes();
+  listenReports();
+
+  showScreen("screenDashboard");
+}
+
+// =========================================================
+// LISTENERS TEMPS REEL
+// =========================================================
+function listenGroups(){
+  if(state.unsubGroups) state.unsubGroups();
+  const q = query(groupsCol(state.coproId), orderBy("createdAt", "asc"));
+  state.unsubGroups = onSnapshot(q, (snap) => {
+    state.groups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderGroupSelect();
+    renderGroupsAdminList();
+  }, (err) => console.error("groups listener", err));
+}
+
+function listenTypes(){
+  if(state.unsubTypes) state.unsubTypes();
+  const q = query(typesCol(state.coproId), orderBy("createdAt", "asc"));
+  state.unsubTypes = onSnapshot(q, (snap) => {
+    state.types = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderTypeGrid();
+    renderTypesAdminList();
+  }, (err) => console.error("types listener", err));
+}
+
+function listenReports(){
+  if(state.unsubReports) state.unsubReports();
+  const q = query(reportsCol(state.coproId), orderBy("createdAt", "desc"));
+  state.unsubReports = onSnapshot(q, (snap) => {
+    state.reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderReportsList();
+    renderAdminReportsList();
+  }, (err) => console.error("reports listener", err));
+}
+
+// =========================================================
+// RENDER: SELECT GROUPES
+// =========================================================
+function renderGroupSelect(){
+  const sel = $("groupSelect");
+  const prev = sel.value;
+  sel.innerHTML = "";
+  const optAll = document.createElement("option");
+  optAll.value = "all";
+  optAll.textContent = "Tous les lieux";
+  sel.appendChild(optAll);
+  state.groups.forEach(g => {
+    const opt = document.createElement("option");
+    opt.value = g.id;
+    opt.textContent = g.name;
+    sel.appendChild(opt);
+  });
+  if(prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
+// =========================================================
+// RENDER: GRILLE DE TYPES (boutons signalement)
+// =========================================================
+function renderTypeGrid(){
+  const grid = $("typeGrid");
+  grid.innerHTML = "";
+  if(state.types.length === 0){
+    grid.innerHTML = `<p class="empty-state" style="grid-column:1/-1;">Aucun type d'incident configuré. ${state.isAdmin ? "Ajoutez-en dans l'administration." : "Contactez votre administrateur."}</p>`;
+    return;
+  }
+  state.types.forEach(t => {
+    const btn = document.createElement("button");
+    btn.className = "type-btn";
+    btn.innerHTML = `<span class="ic">${escapeHtml(t.icon || "❗")}</span><span>${escapeHtml(t.name)}</span>`;
+    btn.addEventListener("click", () => openReportModal(t));
+    grid.appendChild(btn);
+  });
+}
+
+// =========================================================
+// MODALE: NOUVEAU SIGNALEMENT
+// =========================================================
+function openReportModal(type){
+  state.pendingType = type;
+  $("modalIcon").textContent = type.icon || "❗";
+  $("reportModalTitle").textContent = type.name;
+  const groupSel = $("groupSelect");
+  const groupLabel = groupSel.value === "all" || !groupSel.value
+    ? (state.groups[0]?.name || "Lieu non précisé")
+    : groupSel.options[groupSel.selectedIndex].textContent;
+  $("modalSub").textContent = `${state.coproName} · ${groupLabel}`;
+  $("reportComment").value = "";
+  show($("reportModal"));
+  setTimeout(() => $("reportComment").focus(), 150);
+}
+
+async function onReportSubmit(e){
+  e.preventDefault();
+  const btn = e.target.querySelector("button[type=submit]");
+  if(!state.pendingType) return;
+
+  const groupSel = $("groupSelect");
+  let groupId = groupSel.value;
+  let groupName;
+  if(groupId === "all" || !groupId){
+    groupId = state.groups[0]?.id || null;
+    groupName = state.groups[0]?.name || "Non précisé";
+  }else{
+    groupName = groupSel.options[groupSel.selectedIndex].textContent;
+  }
+
+  const comment = $("reportComment").value.trim();
+
+  setBtnLoading(btn, true);
+  try{
+    await addDoc(reportsCol(state.coproId), {
+      typeName: state.pendingType.name,
+      typeIcon: state.pendingType.icon || "❗",
+      groupId: groupId,
+      groupName: groupName,
+      comment: comment || "",
+      author: state.pseudo,
+      status: "reported",
+      createdAt: serverTimestamp(),
+    });
+    hide($("reportModal"));
+    toast("Signalement envoyé. Merci !", "success");
+  }catch(err){
+    console.error(err);
+    toast("Erreur lors de l'envoi du signalement.", "error");
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+// =========================================================
+// RENDER: LISTE DES SIGNALEMENTS (vue résident)
+// =========================================================
+function filteredReports(filter, groupFilter){
+  return state.reports.filter(r => {
+    if(filter !== "all" && r.status !== filter) return false;
+    if(groupFilter && groupFilter !== "all" && r.groupId !== groupFilter) return false;
+    return true;
+  });
+}
+
+function renderReportsList(){
+  const list = $("reportsList");
+  const groupFilter = $("groupSelect").value;
+  const reports = filteredReports(state.filter, groupFilter);
+
+  if(reports.length === 0){
+    list.innerHTML = `<p class="empty-state">Aucun signalement pour le moment. Tout va bien !</p>`;
+    return;
+  }
+  list.innerHTML = "";
+  reports.forEach(r => list.appendChild(reportCardEl(r, false)));
+}
+
+function reportCardEl(r, isAdminView){
+  const card = document.createElement("button");
+  card.className = "report-card";
+  card.innerHTML = `
+    <div class="report-ic">${escapeHtml(r.typeIcon || "❗")}</div>
+    <div class="report-body">
+      <div class="report-top">
+        <span class="report-title">${escapeHtml(r.typeName)}</span>
+        <span class="status-badge status-${r.status}">${STATUS_LABELS[r.status] || r.status}</span>
+      </div>
+      <div class="report-meta">${escapeHtml(r.groupName || "")} · ${formatDate(r.createdAt)}</div>
+      ${r.comment ? `<div class="report-comment">${escapeHtml(r.comment)}</div>` : ""}
+      <div class="report-author">Signalé par ${escapeHtml(r.author || "anonyme")}</div>
+    </div>
+  `;
+  card.addEventListener("click", () => openDetailModal(r, isAdminView));
+  return card;
+}
+
+// =========================================================
+// MODALE: DETAIL SIGNALEMENT (+ changement statut si admin)
+// =========================================================
+function openDetailModal(r, isAdminView){
+  const content = $("detailContent");
+  const statusButtons = ["reported","in_progress","resolved"].map(s => `
+    <button class="detail-status-btn ${s === r.status ? "active status-" + s : ""}" data-status="${s}" ${state.isAdmin ? "" : "disabled"}>
+      ${STATUS_LABELS[s]}
+    </button>
+  `).join("");
+
+  content.innerHTML = `
+    <div class="modal-icon">${escapeHtml(r.typeIcon || "❗")}</div>
+    <h3>${escapeHtml(r.typeName)}</h3>
+    <p class="modal-sub">${escapeHtml(r.groupName || "")} · ${formatDate(r.createdAt)}</p>
+    <div class="detail-status-row">${statusButtons}</div>
+    <div class="detail-meta-block">
+      <div><strong>Signalé par :</strong> ${escapeHtml(r.author || "anonyme")}</div>
+      <div><strong>Date :</strong> ${formatDate(r.createdAt)}</div>
+    </div>
+    ${r.comment ? `<div class="detail-comment-box">${escapeHtml(r.comment)}</div>` : `<p class="settings-help">Aucun commentaire.</p>`}
+    ${state.isAdmin ? `<button class="btn-outline btn-full" id="btnDeleteReport" style="margin-top:18px;border-color:var(--signal);color:var(--signal-dark);">Supprimer ce signalement</button>` : ""}
+  `;
+
+  if(state.isAdmin){
+    content.querySelectorAll(".detail-status-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try{
+          await updateDoc(doc(db, "coprovigie", state.coproId, "reports", r.id), { status: btn.dataset.status });
+          toast("Statut mis à jour", "success");
+          hide($("detailModal"));
+        }catch(e){
+          console.error(e);
+          toast("Erreur lors de la mise à jour", "error");
+        }
+      });
+    });
+    const delBtn = $("btnDeleteReport");
+    if(delBtn){
+      delBtn.addEventListener("click", async () => {
+        if(!confirm("Supprimer définitivement ce signalement ?")) return;
+        try{
+          await deleteDoc(doc(db, "coprovigie", state.coproId, "reports", r.id));
+          toast("Signalement supprimé", "success");
+          hide($("detailModal"));
+        }catch(e){
+          console.error(e);
+          toast("Erreur lors de la suppression", "error");
+        }
+      });
+    }
+  }
+
+  show($("detailModal"));
+}
+
+// =========================================================
+// ADMIN: SIGNALEMENTS
+// =========================================================
+function renderAdminReportsList(){
+  const list = $("adminReportsList");
+  if(!state.isAdmin) return;
+  const reports = filteredReports(state.adminFilter, null);
+  if(reports.length === 0){
+    list.innerHTML = `<p class="empty-state">Aucun signalement.</p>`;
+    return;
+  }
+  list.innerHTML = "";
+  reports.forEach(r => list.appendChild(reportCardEl(r, true)));
+}
+
+function populateAdminScreen(){
+  $("settingsName").value = state.coproName || "";
+  $("settingsCode").value = state.coproCode || "";
+  renderAdminReportsList();
+  renderGroupsAdminList();
+  renderTypesAdminList();
+}
+
+// =========================================================
+// ADMIN: GROUPES (sous-groupes / lieux)
+// =========================================================
+function renderGroupsAdminList(){
+  const ul = $("groupsAdminList");
+  if(!ul) return;
+  ul.innerHTML = "";
+  if(state.groups.length === 0){
+    ul.innerHTML = `<p class="empty-state">Aucun lieu défini. Ajoutez-en un ci-dessus.</p>`;
+    return;
+  }
+  state.groups.forEach(g => {
+    const li = document.createElement("li");
+    li.className = "manage-item";
+    li.innerHTML = `
+      <span class="mi-ic">📍</span>
+      <span class="mi-name">${escapeHtml(g.name)}</span>
+      <button class="mi-del" data-id="${g.id}">Supprimer</button>
+    `;
+    li.querySelector(".mi-del").addEventListener("click", async () => {
+      if(!confirm(`Supprimer "${g.name}" ? Les signalements existants conserveront ce nom.`)) return;
+      try{
+        await deleteDoc(doc(db, "coprovigie", state.coproId, "groups", g.id));
+        toast("Lieu supprimé", "success");
+      }catch(e){ console.error(e); toast("Erreur", "error"); }
+    });
+    ul.appendChild(li);
+  });
+}
+
+async function onAddGroup(e){
+  e.preventDefault();
+  const input = $("newGroupName");
+  const name = input.value.trim();
+  if(!name) return;
+  try{
+    await addDoc(groupsCol(state.coproId), { name, createdAt: serverTimestamp() });
+    input.value = "";
+    toast("Lieu ajouté", "success");
+  }catch(err){
+    console.error(err);
+    toast("Erreur lors de l'ajout", "error");
+  }
+}
+
+// =========================================================
+// ADMIN: TYPES D'INCIDENTS
+// =========================================================
+function renderTypesAdminList(){
+  const ul = $("typesAdminList");
+  if(!ul) return;
+  ul.innerHTML = "";
+  if(state.types.length === 0){
+    ul.innerHTML = `<p class="empty-state">Aucun type défini. Ajoutez-en un ci-dessus.</p>`;
+    return;
+  }
+  state.types.forEach(t => {
+    const li = document.createElement("li");
+    li.className = "manage-item";
+    li.innerHTML = `
+      <span class="mi-ic">${escapeHtml(t.icon || "❗")}</span>
+      <span class="mi-name">${escapeHtml(t.name)}</span>
+      <button class="mi-del" data-id="${t.id}">Supprimer</button>
+    `;
+    li.querySelector(".mi-del").addEventListener("click", async () => {
+      if(!confirm(`Supprimer le type "${t.name}" ?`)) return;
+      try{
+        await deleteDoc(doc(db, "coprovigie", state.coproId, "types", t.id));
+        toast("Type supprimé", "success");
+      }catch(e){ console.error(e); toast("Erreur", "error"); }
+    });
+    ul.appendChild(li);
+  });
+}
+
+async function onAddType(e){
+  e.preventDefault();
+  const nameInput = $("newTypeName");
+  const iconSelect = $("newTypeIcon");
+  const name = nameInput.value.trim();
+  const icon = iconSelect.value || "❗";
+  if(!name) return;
+  try{
+    await addDoc(typesCol(state.coproId), { name, icon, createdAt: serverTimestamp() });
+    nameInput.value = "";
+    toast("Type ajouté", "success");
+  }catch(err){
+    console.error(err);
+    toast("Erreur lors de l'ajout", "error");
+  }
+}
+
+// =========================================================
+// ADMIN: REGLAGES
+// =========================================================
+async function onSettingsName(e){
+  e.preventDefault();
+  const name = $("settingsName").value.trim();
+  if(!name) return;
+  try{
+    await updateDoc(coproRef(state.coproId), { name });
+    state.coproName = name;
+    $("topbarCopro").textContent = name;
+    saveSession();
+    toast("Nom mis à jour", "success");
+  }catch(err){
+    console.error(err);
+    toast("Erreur", "error");
+  }
+}
+
+async function onSettingsCode(e){
+  e.preventDefault();
+  const code = normalizeCode($("settingsCode").value);
+  if(!code) return;
+  try{
+    // vérifie unicité
+    const q = query(collection(db, "coprovigie"), where("code", "==", code));
+    const snap = await getDocs(q);
+    if(!snap.empty && snap.docs[0].id !== state.coproId){
+      toast("Ce code est déjà utilisé par une autre copropriété.", "error");
+      return;
+    }
+    await updateDoc(coproRef(state.coproId), { code });
+    state.coproCode = code;
+    saveSession();
+    toast("Code d'accès mis à jour. Les sessions déjà ouvertes ne sont pas affectées.", "success");
+  }catch(err){
+    console.error(err);
+    toast("Erreur", "error");
+  }
+}
+
+async function onSettingsPass(e){
+  e.preventDefault();
+  const pass = $("settingsPass").value;
+  if(pass.length < 6){
+    toast("Le mot de passe doit faire au moins 6 caractères.", "error");
+    return;
+  }
+  try{
+    await updateDoc(coproRef(state.coproId), { adminPass: pass });
+    $("settingsPass").value = "";
+    toast("Mot de passe administrateur mis à jour", "success");
+  }catch(err){
+    console.error(err);
+    toast("Erreur", "error");
+  }
+}
+</script>
 </body>
 </html>
