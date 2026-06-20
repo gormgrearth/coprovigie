@@ -141,7 +141,11 @@ const reportsCol   = (id) => collection(db, "coprovigie", id, "reports");
 // =========================================================
 // NAVIGATION INITIALE
 // =========================================================
-document.addEventListener("DOMContentLoaded", init);
+// Note : ce script est chargé en type="module", donc il s'exécute
+// toujours APRES le DOMContentLoaded (comportement "defer" implicite).
+// On ne peut donc pas écouter cet événement (il ne se déclencherait
+// jamais) : on appelle init() directement, le DOM est déjà prêt.
+init();
 
 async function init(){
   bindStaticEvents();
