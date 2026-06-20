@@ -464,6 +464,17 @@ h1,h2,h3{ margin:0; }
   border-radius:var(--radius-s); padding:13px 14px; font-size:14px; margin-top:6px;
 }
 
+/* historique des changements de statut */
+.history-list{ display:flex; flex-direction:column; gap:8px; max-height:240px; overflow-y:auto; }
+.history-item{
+  background:var(--paper-raised); border:1.5px solid var(--line-soft);
+  border-radius:var(--radius-s); padding:11px 13px;
+}
+.history-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; }
+.history-meta{ font-size:11px; color:var(--meta); font-family:var(--mono); }
+.history-author{ font-size:12px; color:var(--ink-soft); font-weight:600; }
+.history-comment{ font-size:13px; color:var(--ink-soft); margin-top:5px; }
+
 /* =========================================================
    TOAST
 ========================================================= */
@@ -851,6 +862,7 @@ let state = {
   coproCode: null,
   groupId: null,    // sous-groupe sélectionné pour signaler
   pseudo: null,
+  memberId: null,   // identifiant unique de résident (preuve d'auteur, anti-usurpation)
   isAdmin: false,
   groups: [],
   types: [],
@@ -863,12 +875,19 @@ let state = {
   pendingType: null, // type en cours de signalement (pour la modale)
 };
 
+function generateMemberId(){
+  // ID local unique, indépendant du pseudo (qui peut être affiché/changé),
+  // utilisé comme preuve d'auteur pour modifier/supprimer ses propres signalements.
+  return 'm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+}
+
 function saveSession(){
   localStorage.setItem(LS_KEY, JSON.stringify({
     coproId: state.coproId,
     coproName: state.coproName,
     coproCode: state.coproCode,
     pseudo: state.pseudo,
+    memberId: state.memberId,
     isAdmin: state.isAdmin,
   }));
 }
@@ -929,15 +948,19 @@ function escapeHtml(str){
 
 // ---------------------------------------------------------
 // FIRESTORE PATHS
-// coprovigie/{coproId}                         -> doc copro (name, code, adminPass)
-// coprovigie/{coproId}/groups/{groupId}         -> sous-groupes
-// coprovigie/{coproId}/types/{typeId}           -> types d'incidents
-// coprovigie/{coproId}/reports/{reportId}       -> signalements
+// coprovigie/{coproId}                              -> doc copro (name, code, adminPass)
+// coprovigie/{coproId}/groups/{groupId}              -> sous-groupes
+// coprovigie/{coproId}/types/{typeId}                -> types d'incidents
+// coprovigie/{coproId}/members/{memberId}             -> résidents (pseudo unique, anti-usurpation)
+// coprovigie/{coproId}/reports/{reportId}            -> signalements
+// coprovigie/{coproId}/reports/{reportId}/history/{} -> historique des changements de statut
 // ---------------------------------------------------------
 const coproRef    = (id) => doc(db, "coprovigie", id);
 const groupsCol    = (id) => collection(db, "coprovigie", id, "groups");
 const typesCol     = (id) => collection(db, "coprovigie", id, "types");
 const reportsCol   = (id) => collection(db, "coprovigie", id, "reports");
+const membersCol   = (id) => collection(db, "coprovigie", id, "members");
+const historyCol   = (coproId, reportId) => collection(db, "coprovigie", coproId, "reports", reportId, "history");
 
 // =========================================================
 // NAVIGATION INITIALE
@@ -974,6 +997,7 @@ async function init(){
         state.coproName = data.name;
         state.coproCode = data.code;
         state.pseudo = session.pseudo;
+        state.memberId = session.memberId || null;
         state.isAdmin = !!session.isAdmin;
         saveSession();
         enterCoproSpace();
@@ -1105,10 +1129,20 @@ async function onCreateSubmit(e){
     // un groupe par défaut
     await addDoc(groupsCol(newCoproRef.id), { name: "Bâtiment principal", createdAt: serverTimestamp() });
 
+    // l'admin est aussi enregistré comme membre (pseudo unique), pour pouvoir
+    // être identifié comme auteur de ses propres signalements
+    const memberId = generateMemberId();
+    await setDoc(doc(membersCol(newCoproRef.id), memberId), {
+      pseudo: pseudo,
+      pseudoKey: normalizePseudo(pseudo),
+      createdAt: serverTimestamp(),
+    });
+
     state.coproId = newCoproRef.id;
     state.coproName = name;
     state.coproCode = code;
     state.pseudo = pseudo;
+    state.memberId = memberId;
     state.isAdmin = true;
     saveSession();
 
@@ -1126,6 +1160,10 @@ async function onCreateSubmit(e){
 // =========================================================
 // REJOINDRE (résident)
 // =========================================================
+function normalizePseudo(pseudo){
+  return (pseudo || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 async function onJoinSubmit(e){
   e.preventDefault();
   const btn = e.target.querySelector("button[type=submit]");
@@ -1152,11 +1190,42 @@ async function onJoinSubmit(e){
     }
     const docSnap = snap.docs[0];
     const data = docSnap.data();
+    const coproId = docSnap.id;
+    const pseudoKey = normalizePseudo(pseudo);
 
-    state.coproId = docSnap.id;
+    // Vérifie si ce pseudo existe déjà pour cette copropriété
+    const mQ = query(membersCol(coproId), where("pseudoKey", "==", pseudoKey));
+    const mSnap = await getDocs(mQ);
+
+    let memberId;
+    if(!mSnap.empty){
+      // Le pseudo existe déjà : on ne peut le réutiliser que si on possède
+      // déjà ce memberId localement (reconnexion depuis le même appareil/navigateur).
+      const existingMember = mSnap.docs[0];
+      const localSession = loadSession();
+      if(localSession && localSession.memberId === existingMember.id && localSession.coproId === coproId){
+        memberId = existingMember.id;
+      }else{
+        errEl.textContent = `Le pseudo "${pseudo}" est déjà utilisé dans cette copropriété. Choisissez-en un autre pour vous distinguer.`;
+        show(errEl);
+        setBtnLoading(btn, false);
+        return;
+      }
+    }else{
+      // Nouveau résident : on crée son identifiant unique
+      memberId = generateMemberId();
+      await setDoc(doc(membersCol(coproId), memberId), {
+        pseudo: pseudo,
+        pseudoKey: pseudoKey,
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    state.coproId = coproId;
     state.coproName = data.name;
     state.coproCode = data.code;
     state.pseudo = pseudo;
+    state.memberId = memberId;
     state.isAdmin = false;
     saveSession();
 
@@ -1363,8 +1432,10 @@ async function onReportSubmit(e){
       groupName: groupName,
       comment: comment || "",
       author: state.pseudo,
+      authorId: state.memberId || null,
       status: "reported",
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
     hide($("reportModal"));
     toast("Signalement envoyé. Merci !", "success");
@@ -1420,12 +1491,27 @@ function reportCardEl(r, isAdminView){
 }
 
 // =========================================================
-// MODALE: DETAIL SIGNALEMENT (+ changement statut si admin)
+// DROITS: l'auteur d'un signalement (via son memberId) ou
+// l'administrateur peuvent le modifier/supprimer. Tout résident
+// connecté peut changer le statut (signalé/en cours/résolu).
+// =========================================================
+function canEditReport(r){
+  if(state.isAdmin) return true;
+  if(!state.memberId) return false;
+  return r.authorId === state.memberId;
+}
+
+// =========================================================
+// MODALE: DETAIL SIGNALEMENT
+// Changement de statut ouvert à tous les résidents (avec commentaire
+// optionnel + historique horodaté). Modifier/supprimer le signalement
+// est réservé à son auteur ou à l'administrateur.
 // =========================================================
 function openDetailModal(r, isAdminView){
   const content = $("detailContent");
+  const editable = canEditReport(r);
   const statusButtons = ["reported","in_progress","resolved"].map(s => `
-    <button class="detail-status-btn ${s === r.status ? "active status-" + s : ""}" data-status="${s}" ${state.isAdmin ? "" : "disabled"}>
+    <button class="detail-status-btn ${s === r.status ? "active status-" + s : ""}" data-status="${s}">
       ${STATUS_LABELS[s]}
     </button>
   `).join("");
@@ -1440,22 +1526,34 @@ function openDetailModal(r, isAdminView){
       <div><strong>Date :</strong> ${formatDate(r.createdAt)}</div>
     </div>
     ${r.comment ? `<div class="detail-comment-box">${escapeHtml(r.comment)}</div>` : `<p class="settings-help">Aucun commentaire.</p>`}
-    ${state.isAdmin ? `<button class="btn-outline btn-full" id="btnDeleteReport" style="margin-top:18px;border-color:var(--signal);color:var(--signal-dark);">Supprimer ce signalement</button>` : ""}
+
+    <div class="dash-divider" style="margin-top:24px;"><span>Historique</span></div>
+    <div id="historyList" class="history-list">
+      <p class="empty-state" style="padding:16px;">Chargement…</p>
+    </div>
+
+    ${editable ? `
+      <div style="display:flex; gap:8px; margin-top:20px;">
+        <button class="btn-outline btn-full" id="btnEditReport">Modifier mon commentaire</button>
+        <button class="btn-outline btn-full" id="btnDeleteReport" style="border-color:var(--signal);color:var(--signal-dark);">Supprimer</button>
+      </div>
+    ` : ""}
   `;
 
-  if(state.isAdmin){
-    content.querySelectorAll(".detail-status-btn").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        try{
-          await updateDoc(doc(db, "coprovigie", state.coproId, "reports", r.id), { status: btn.dataset.status });
-          toast("Statut mis à jour", "success");
-          hide($("detailModal"));
-        }catch(e){
-          console.error(e);
-          toast("Erreur lors de la mise à jour", "error");
-        }
-      });
+  // --- Changement de statut : ouvert à tout résident connecté ---
+  content.querySelectorAll(".detail-status-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if(btn.dataset.status === r.status) return; // déjà sur ce statut
+      openStatusChangeModal(r, btn.dataset.status);
     });
+  });
+
+  // --- Modifier le commentaire original (auteur ou admin uniquement) ---
+  if(editable){
+    const editBtn = $("btnEditReport");
+    if(editBtn){
+      editBtn.addEventListener("click", () => openEditReportModal(r));
+    }
     const delBtn = $("btnDeleteReport");
     if(delBtn){
       delBtn.addEventListener("click", async () => {
@@ -1473,6 +1571,142 @@ function openDetailModal(r, isAdminView){
   }
 
   show($("detailModal"));
+  loadReportHistory(r.id);
+}
+
+// =========================================================
+// HISTORIQUE DES CHANGEMENTS DE STATUT
+// =========================================================
+async function loadReportHistory(reportId){
+  const list = $("historyList");
+  if(!list) return; // la modale a pu être fermée entre temps
+  try{
+    const q = query(historyCol(state.coproId, reportId), orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+    const freshList = $("historyList"); // re-vérifie après l'await (modale encore ouverte ?)
+    if(!freshList) return;
+    if(snap.empty){
+      freshList.innerHTML = `<p class="empty-state" style="padding:16px;">Aucun changement pour l'instant.</p>`;
+      return;
+    }
+    freshList.innerHTML = snap.docs.map(d => {
+      const h = d.data();
+      return `
+        <div class="history-item">
+          <div class="history-top">
+            <span class="status-badge status-${h.toStatus}">${STATUS_LABELS[h.toStatus] || h.toStatus}</span>
+            <span class="history-meta">${formatDate(h.createdAt)}</span>
+          </div>
+          <div class="history-author">par ${escapeHtml(h.author || "anonyme")}</div>
+          ${h.comment ? `<div class="history-comment">${escapeHtml(h.comment)}</div>` : ""}
+        </div>
+      `;
+    }).join("");
+  }catch(e){
+    console.error(e);
+    const freshList = $("historyList");
+    if(freshList) freshList.innerHTML = `<p class="empty-state" style="padding:16px;">Historique indisponible.</p>`;
+  }
+}
+
+// =========================================================
+// MODALE: CHANGEMENT DE STATUT (avec commentaire optionnel)
+// =========================================================
+function openStatusChangeModal(r, newStatus){
+  const content = $("detailContent");
+  content.innerHTML = `
+    <div class="modal-icon">${escapeHtml(r.typeIcon || "❗")}</div>
+    <h3>Passer en « ${STATUS_LABELS[newStatus]} »</h3>
+    <p class="modal-sub">${escapeHtml(r.typeName)} · ${escapeHtml(r.groupName || "")}</p>
+    <form id="formStatusChange">
+      <label class="field">
+        <span class="field-label">Commentaire (facultatif)</span>
+        <textarea id="statusComment" class="input textarea" rows="3" maxlength="500" placeholder="Ex. Technicien prévenu, intervention prévue jeudi…"></textarea>
+      </label>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn-outline btn-full" id="btnCancelStatus">Annuler</button>
+        <button type="submit" class="btn-primary btn-full">
+          <span>Confirmer</span>
+          <span class="btn-spinner" hidden></span>
+        </button>
+      </div>
+    </form>
+  `;
+
+  $("btnCancelStatus").addEventListener("click", () => openDetailModal(r, state.isAdmin));
+
+  $("formStatusChange").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector("button[type=submit]");
+    const comment = $("statusComment").value.trim();
+    setBtnLoading(btn, true);
+    try{
+      await updateDoc(doc(db, "coprovigie", state.coproId, "reports", r.id), {
+        status: newStatus,
+        updatedAt: serverTimestamp(),
+      });
+      await addDoc(historyCol(state.coproId, r.id), {
+        fromStatus: r.status,
+        toStatus: newStatus,
+        author: state.pseudo,
+        authorId: state.memberId || null,
+        comment: comment || "",
+        createdAt: serverTimestamp(),
+      });
+      toast("Statut mis à jour", "success");
+      hide($("detailModal"));
+    }catch(err){
+      console.error(err);
+      toast("Erreur lors de la mise à jour", "error");
+      setBtnLoading(btn, false);
+    }
+  });
+}
+
+// =========================================================
+// MODALE: MODIFIER LE COMMENTAIRE D'UN SIGNALEMENT (auteur/admin)
+// =========================================================
+function openEditReportModal(r){
+  const content = $("detailContent");
+  content.innerHTML = `
+    <div class="modal-icon">${escapeHtml(r.typeIcon || "❗")}</div>
+    <h3>Modifier le signalement</h3>
+    <p class="modal-sub">${escapeHtml(r.typeName)} · ${escapeHtml(r.groupName || "")}</p>
+    <form id="formEditReport">
+      <label class="field">
+        <span class="field-label">Commentaire</span>
+        <textarea id="editComment" class="input textarea" rows="3" maxlength="500">${escapeHtml(r.comment || "")}</textarea>
+      </label>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn-outline btn-full" id="btnCancelEdit">Annuler</button>
+        <button type="submit" class="btn-primary btn-full">
+          <span>Enregistrer</span>
+          <span class="btn-spinner" hidden></span>
+        </button>
+      </div>
+    </form>
+  `;
+
+  $("btnCancelEdit").addEventListener("click", () => openDetailModal(r, state.isAdmin));
+
+  $("formEditReport").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector("button[type=submit]");
+    const comment = $("editComment").value.trim();
+    setBtnLoading(btn, true);
+    try{
+      await updateDoc(doc(db, "coprovigie", state.coproId, "reports", r.id), {
+        comment: comment,
+        updatedAt: serverTimestamp(),
+      });
+      toast("Signalement modifié", "success");
+      hide($("detailModal"));
+    }catch(err){
+      console.error(err);
+      toast("Erreur lors de la modification", "error");
+      setBtnLoading(btn, false);
+    }
+  });
 }
 
 // =========================================================
