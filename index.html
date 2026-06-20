@@ -47,6 +47,15 @@
 
 *,*::before,*::after{ box-sizing:border-box; }
 html,body{ height:100%; }
+
+/* GARANTIT que l'attribut HTML "hidden" masque toujours l'élément,
+   même si une règle CSS plus bas définit display:flex/grid/etc.
+   Sans cette règle, .loader{display:flex} et .app{display:flex}
+   écrasent le comportement natif de [hidden] et l'élément reste
+   visible malgré tout — bug à l'origine de l'écran de chargement
+   qui ne disparaît jamais. */
+[hidden]{ display:none !important; }
+
 body{
   margin:0;
   background:var(--paper);
@@ -791,7 +800,7 @@ import {
   serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
-// --- Configuration Firebase (renseignée automatiquement depuis firebase-config.js) ---
+// --- Configuration Firebase ---
 const firebaseConfig = {
   apiKey: "AIzaSyA-Qj8Gs1q1YQyCl4_fsXr1B6AiSENgBxQ",
   authDomain: "coprovigie.firebaseapp.com",
@@ -806,16 +815,14 @@ const firebaseConfig = {
 // ---------------------------------------------------------
 // INIT FIREBASE
 // ---------------------------------------------------------
-console.log('CHECKPOINT 1: avant init firebase');
 let app, db;
 let firebaseReady = false;
 try{
   app = initializeApp(firebaseConfig);
   db = getFirestore(app);
   firebaseReady = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "VOTRE_API_KEY";
-  console.log('CHECKPOINT 1b: firebase initializeApp/getFirestore OK, app=', app, 'db=', db);
 }catch(e){
-  console.error("CHECKPOINT 1-ERROR: Firebase init error", e);
+  console.error("Firebase init error", e);
 }
 
 // ---------------------------------------------------------
@@ -939,16 +946,11 @@ const reportsCol   = (id) => collection(db, "coprovigie", id, "reports");
 // toujours APRES le DOMContentLoaded (comportement "defer" implicite).
 // On ne peut donc pas écouter cet événement (il ne se déclencherait
 // jamais) : on appelle init() directement, le DOM est déjà prêt.
-console.log('CHECKPOINT 2: avant appel init()');
 init();
-console.log('CHECKPOINT 3: apres appel init() (synchrone)');
 
 async function init(){
-  console.log('CHECKPOINT 4: dans init(), avant bindStaticEvents');
   bindStaticEvents();
-  console.log('CHECKPOINT 5: bindStaticEvents termine');
 
-  console.log('CHECKPOINT 6: firebaseReady =', firebaseReady);
   if(!firebaseReady){
     hide($("loader"));
     show($("app"));
@@ -957,18 +959,13 @@ async function init(){
     return;
   }
 
-  console.log('CHECKPOINT 7: firebaseReady true, on continue');
   const session = loadSession();
-  console.log('CHECKPOINT 8: session =', session);
   hide($("loader"));
   show($("app"));
-  console.log('CHECKPOINT 9: loader caché, app affiché');
 
   if(session && session.coproId){
-    console.log('CHECKPOINT 10: session existante, on va chercher la copro', session.coproId);
     try{
       const snap = await getDoc(coproRef(session.coproId));
-      console.log('CHECKPOINT 11: getDoc resolu, exists=', snap.exists());
       if(snap.exists()){
         const data = snap.data();
         // vérifie que le pseudo/role est toujours valide (le code peut avoir changé,
@@ -982,11 +979,9 @@ async function init(){
         enterCoproSpace();
         return;
       }
-    }catch(e){ console.error('CHECKPOINT 10-ERROR:', e); }
+    }catch(e){ console.error(e); }
   }
-  console.log('CHECKPOINT 12: affichage ecran accueil');
   showScreen("screenWelcome");
-  console.log('CHECKPOINT 13: FIN INIT');
 }
 
 function bindStaticEvents(){
