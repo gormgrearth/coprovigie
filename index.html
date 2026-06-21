@@ -241,6 +241,7 @@ h1,h2,h3{ margin:0; }
 .stack-form{ display:flex; flex-direction:column; gap:18px; width:100%; max-width:420px; }
 .field{ display:flex; flex-direction:column; gap:7px; }
 .field-label{ font-size:13px; font-weight:600; color:var(--ink-soft); }
+.field-hint{ font-size:12px; color:var(--meta); line-height:1.4; margin-top:-2px; }
 
 .input{
   width:100%;
@@ -584,12 +585,28 @@ h1,h2,h3{ margin:0; }
         <span class="field-label">Votre pseudo</span>
         <input id="joinPseudo" type="text" autocomplete="off" placeholder="Ex. Marie, Appt 14" required class="input" maxlength="30">
       </label>
+      <label class="field">
+        <span class="field-label">Code personnel</span>
+        <input id="joinPersonalCode" type="text" inputmode="text" autocomplete="off" placeholder="4 caractères min." required class="input input-code" maxlength="20" minlength="4">
+        <span class="field-hint">À inventer librement la première fois (sert à vous reconnecter ensuite, même depuis un autre appareil).</span>
+      </label>
       <p id="joinError" class="form-error" hidden></p>
       <button type="submit" class="btn-primary btn-large btn-full">
         <span>Entrer</span>
         <span class="btn-spinner" hidden></span>
       </button>
     </form>
+    <button id="btnForgotCode" class="link-muted">Code personnel oublié ? Demandez à votre administrateur de le réinitialiser.</button>
+  </section>
+
+  <!-- =====================================================
+       ECRAN 1b — CODE PERSONNEL OUBLIÉ (info)
+  ====================================================== -->
+  <section id="screenForgotCode" class="screen screen-center" hidden>
+    <button class="btn-back" data-back="screenJoin">← Retour</button>
+    <p class="eyebrow">Code oublié</p>
+    <h2 class="screen-title">Demandez une réinitialisation</h2>
+    <p class="screen-sub">Contactez l'administrateur de votre copropriété (syndic, conseil syndical…) en lui indiquant votre pseudo. Il pourra réinitialiser votre code personnel depuis son espace d'administration, onglet « Résidents ». Vous pourrez alors en choisir un nouveau à la prochaine connexion.</p>
   </section>
 
   <!-- =====================================================
@@ -702,6 +719,7 @@ h1,h2,h3{ margin:0; }
       <button class="admin-tab admin-tab-active" data-tab="tabReports">Signalements</button>
       <button class="admin-tab" data-tab="tabGroups">Lieux / Sous-groupes</button>
       <button class="admin-tab" data-tab="tabTypes">Types d'incidents</button>
+      <button class="admin-tab" data-tab="tabMembers">Résidents</button>
       <button class="admin-tab" data-tab="tabSettings">Réglages</button>
     </nav>
 
@@ -735,6 +753,12 @@ h1,h2,h3{ margin:0; }
         <button type="submit" class="btn-primary">Ajouter</button>
       </form>
       <ul id="typesAdminList" class="manage-list"></ul>
+    </div>
+
+    <!-- TAB: résidents -->
+    <div id="tabMembers" class="admin-tab-panel" hidden>
+      <p class="settings-help">Si un résident a oublié son code personnel, réinitialisez-le ici : il pourra en choisir un nouveau à sa prochaine connexion avec son pseudo habituel.</p>
+      <ul id="membersAdminList" class="manage-list"></ul>
     </div>
 
     <!-- TAB: réglages -->
@@ -867,11 +891,13 @@ let state = {
   groups: [],
   types: [],
   reports: [],
+  members: [],
   filter: "all",
   adminFilter: "all",
   unsubReports: null,
   unsubGroups: null,
   unsubTypes: null,
+  unsubMembers: null,
   pendingType: null, // type en cours de signalement (pour la modale)
 };
 
@@ -1013,6 +1039,7 @@ function bindStaticEvents(){
   $("btnGoJoin").addEventListener("click", () => showScreen("screenJoin"));
   $("btnGoCreate").addEventListener("click", () => showScreen("screenCreate"));
   $("btnGoAdminLogin").addEventListener("click", () => showScreen("screenAdminLogin"));
+  $("btnForgotCode").addEventListener("click", () => showScreen("screenForgotCode"));
 
   document.querySelectorAll("[data-back]").forEach(btn => {
     btn.addEventListener("click", () => showScreen(btn.dataset.back));
@@ -1130,11 +1157,16 @@ async function onCreateSubmit(e){
     await addDoc(groupsCol(newCoproRef.id), { name: "Bâtiment principal", createdAt: serverTimestamp() });
 
     // l'admin est aussi enregistré comme membre (pseudo unique), pour pouvoir
-    // être identifié comme auteur de ses propres signalements
+    // être identifié comme auteur de ses propres signalements. Son code
+    // personnel n'est pas utilisé (l'admin se reconnecte toujours via mot
+    // de passe admin), mais le champ est rempli pour rester cohérent avec
+    // la structure attendue par les règles Firestore.
     const memberId = generateMemberId();
     await setDoc(doc(membersCol(newCoproRef.id), memberId), {
       pseudo: pseudo,
       pseudoKey: normalizePseudo(pseudo),
+      personalCode: generateMemberId(),
+      personalCodeReset: false,
       createdAt: serverTimestamp(),
     });
 
@@ -1172,8 +1204,9 @@ async function onJoinSubmit(e){
 
   const code = normalizeCode($("joinCode").value);
   const pseudo = $("joinPseudo").value.trim();
-  if(!code || !pseudo){
-    errEl.textContent = "Merci de renseigner le code et votre pseudo.";
+  const personalCode = $("joinPersonalCode").value.trim();
+  if(!code || !pseudo || personalCode.length < 4){
+    errEl.textContent = "Merci de renseigner le code d'accès, votre pseudo et un code personnel (4 caractères min.).";
     show(errEl);
     return;
   }
@@ -1199,24 +1232,36 @@ async function onJoinSubmit(e){
 
     let memberId;
     if(!mSnap.empty){
-      // Le pseudo existe déjà : on ne peut le réutiliser que si on possède
-      // déjà ce memberId localement (reconnexion depuis le même appareil/navigateur).
+      // Pseudo déjà utilisé : on vérifie le code personnel pour confirmer
+      // que c'est bien le même résident (reconnexion, nouvel appareil, etc.)
       const existingMember = mSnap.docs[0];
-      const localSession = loadSession();
-      if(localSession && localSession.memberId === existingMember.id && localSession.coproId === coproId){
+      const memberData = existingMember.data();
+
+      if(memberData.personalCodeReset === true){
+        // Le code venait d'être réinitialisé par l'admin : on accepte le
+        // nouveau code tapé par le résident et on l'enregistre comme son
+        // nouveau code personnel.
+        await updateDoc(doc(membersCol(coproId), existingMember.id), {
+          personalCode: personalCode,
+          personalCodeReset: false,
+        });
+        memberId = existingMember.id;
+      }else if(memberData.personalCode === personalCode){
         memberId = existingMember.id;
       }else{
-        errEl.textContent = `Le pseudo "${pseudo}" est déjà utilisé dans cette copropriété. Choisissez-en un autre pour vous distinguer.`;
+        errEl.textContent = `Le pseudo "${pseudo}" est déjà utilisé. Si c'est vous, entrez votre code personnel habituel. Sinon, choisissez un autre pseudo.`;
         show(errEl);
         setBtnLoading(btn, false);
         return;
       }
     }else{
-      // Nouveau résident : on crée son identifiant unique
+      // Nouveau résident : on crée son identifiant unique + son code personnel
       memberId = generateMemberId();
       await setDoc(doc(membersCol(coproId), memberId), {
         pseudo: pseudo,
         pseudoKey: pseudoKey,
+        personalCode: personalCode,
+        personalCodeReset: false,
         createdAt: serverTimestamp(),
       });
     }
@@ -1293,8 +1338,9 @@ function logout(){
   if(state.unsubReports) state.unsubReports();
   if(state.unsubGroups) state.unsubGroups();
   if(state.unsubTypes) state.unsubTypes();
+  if(state.unsubMembers) state.unsubMembers();
   clearSession();
-  state = { ...state, coproId:null, coproName:null, coproCode:null, pseudo:null, isAdmin:false, groups:[], types:[], reports:[] };
+  state = { ...state, coproId:null, coproName:null, coproCode:null, pseudo:null, memberId:null, isAdmin:false, groups:[], types:[], reports:[], members:[] };
   hide($("topbar"));
   hide($("btnAdminToggle"));
   showScreen("screenWelcome");
@@ -1313,6 +1359,7 @@ function enterCoproSpace(){
   listenGroups();
   listenTypes();
   listenReports();
+  if(state.isAdmin) listenMembers();
 
   showScreen("screenDashboard");
 }
@@ -1338,6 +1385,15 @@ function listenTypes(){
     renderTypeGrid();
     renderTypesAdminList();
   }, (err) => console.error("types listener", err));
+}
+
+function listenMembers(){
+  if(state.unsubMembers) state.unsubMembers();
+  const q = query(membersCol(state.coproId), orderBy("createdAt", "asc"));
+  state.unsubMembers = onSnapshot(q, (snap) => {
+    state.members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderMembersAdminList();
+  }, (err) => console.error("members listener", err));
 }
 
 function listenReports(){
@@ -1730,6 +1786,7 @@ function populateAdminScreen(){
   renderAdminReportsList();
   renderGroupsAdminList();
   renderTypesAdminList();
+  renderMembersAdminList();
 }
 
 // =========================================================
@@ -1822,6 +1879,39 @@ async function onAddType(e){
     console.error(err);
     toast("Erreur lors de l'ajout", "error");
   }
+}
+
+// =========================================================
+// ADMIN: RESIDENTS (réinitialisation du code personnel)
+// =========================================================
+function renderMembersAdminList(){
+  const ul = $("membersAdminList");
+  if(!ul) return;
+  ul.innerHTML = "";
+  if(state.members.length === 0){
+    ul.innerHTML = `<p class="empty-state">Aucun résident inscrit pour l'instant.</p>`;
+    return;
+  }
+  state.members.forEach(m => {
+    const li = document.createElement("li");
+    li.className = "manage-item";
+    const resetPending = m.personalCodeReset === true;
+    li.innerHTML = `
+      <span class="mi-ic">👤</span>
+      <span class="mi-name">${escapeHtml(m.pseudo)} ${resetPending ? '<span class="status-badge status-in_progress" style="margin-left:6px;">Réinit. en attente</span>' : ""}</span>
+      <button class="mi-del" data-id="${m.id}" ${resetPending ? "disabled" : ""}>Réinitialiser le code</button>
+    `;
+    if(!resetPending){
+      li.querySelector(".mi-del").addEventListener("click", async () => {
+        if(!confirm(`Réinitialiser le code personnel de "${m.pseudo}" ? Il pourra en choisir un nouveau à sa prochaine connexion.`)) return;
+        try{
+          await updateDoc(doc(membersCol(state.coproId), m.id), { personalCodeReset: true });
+          toast("Code personnel réinitialisé", "success");
+        }catch(e){ console.error(e); toast("Erreur", "error"); }
+      });
+    }
+    ul.appendChild(li);
+  });
 }
 
 // =========================================================
