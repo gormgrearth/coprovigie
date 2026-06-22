@@ -164,6 +164,8 @@ h1,h2,h3{ margin:0; }
   font-weight:600;
 }
 .btn-ghost:hover{ background:var(--line-soft); color:var(--ink); }
+.btn-danger-ghost{ color:var(--signal-dark) !important; }
+.btn-danger-ghost:hover{ background:var(--signal-tint) !important; color:var(--signal-dark) !important; }
 
 .btn-large{ padding:16px 26px; font-size:16px; border-radius:var(--radius-m); }
 .btn-small{ padding:8px 14px; font-size:13px; border-radius:var(--radius-s); }
@@ -539,6 +541,7 @@ h1,h2,h3{ margin:0; }
     <div class="topbar-right">
       <span id="topbarUser" class="topbar-user"></span>
       <button id="btnAdminToggle" class="btn-ghost btn-small" hidden>Admin</button>
+      <button id="btnDeleteMyAccount" class="btn-ghost btn-small btn-danger-ghost" hidden>Supprimer mon compte</button>
       <button id="btnLogout" class="btn-ghost btn-small">Quitter</button>
     </div>
   </header>
@@ -785,6 +788,11 @@ h1,h2,h3{ margin:0; }
           <button type="submit" class="btn-outline">Changer</button>
         </form>
       </div>
+      <div class="settings-card settings-danger" style="border-color:var(--signal);margin-top:8px;">
+        <h3 style="color:var(--signal-dark);">⚠ Zone de danger</h3>
+        <p class="settings-help">Supprimer la copropriété effacera définitivement tous les signalements, lieux, types d'incidents et résidents. Cette action est irréversible.</p>
+        <button id="btnDeleteCopro" class="btn-primary btn-full" style="background:var(--signal-dark);">Supprimer toute la copropriété</button>
+      </div>
     </div>
   </section>
 
@@ -835,7 +843,7 @@ import {
   serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
-// --- Configuration Firebase ---
+// --- Config Firebase ---
 const firebaseConfig = {
   apiKey: "AIzaSyA-Qj8Gs1q1YQyCl4_fsXr1B6AiSENgBxQ",
   authDomain: "coprovigie.firebaseapp.com",
@@ -1062,6 +1070,8 @@ function bindStaticEvents(){
     populateAdminScreen();
     showScreen("screenAdmin");
   });
+  $("btnDeleteMyAccount").addEventListener("click", onDeleteMyAccount);
+  $("btnDeleteCopro").addEventListener("click", onDeleteCopro);
   $("btnBackToDash").addEventListener("click", () => showScreen("screenDashboard"));
 
   // Modals
@@ -1355,6 +1365,9 @@ function enterCoproSpace(){
   $("topbarUser").textContent = state.pseudo;
   show($("topbar"));
   if(state.isAdmin) show($("btnAdminToggle")); else hide($("btnAdminToggle"));
+  // Bouton "Supprimer mon compte" : visible pour les résidents qui ont un memberId
+  // (pas pour l'admin connecté par mot de passe, qui supprime via les réglages)
+  if(!state.isAdmin && state.memberId) show($("btnDeleteMyAccount")); else hide($("btnDeleteMyAccount"));
 
   listenGroups();
   listenTypes();
@@ -1389,11 +1402,19 @@ function listenTypes(){
 
 function listenMembers(){
   if(state.unsubMembers) state.unsubMembers();
-  const q = query(membersCol(state.coproId), orderBy("createdAt", "asc"));
+  // Pas de orderBy : évite l'erreur d'index manquant sur collection vide
+  // et fonctionne même si certains documents n'ont pas de champ createdAt.
+  const q = query(membersCol(state.coproId));
   state.unsubMembers = onSnapshot(q, (snap) => {
     state.members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Tri côté client par pseudo pour un affichage stable
+    state.members.sort((a,b) => (a.pseudo||"").localeCompare(b.pseudo||"", "fr"));
     renderMembersAdminList();
-  }, (err) => console.error("members listener", err));
+  }, (err) => {
+    console.error("members listener:", err.code, err.message);
+    const ul = $("membersAdminList");
+    if(ul) ul.innerHTML = `<p class="empty-state">Impossible de charger les résidents (${err.code}). Vérifiez les règles Firestore.</p>`;
+  });
 }
 
 function listenReports(){
@@ -1898,20 +1919,113 @@ function renderMembersAdminList(){
     const resetPending = m.personalCodeReset === true;
     li.innerHTML = `
       <span class="mi-ic">👤</span>
-      <span class="mi-name">${escapeHtml(m.pseudo)} ${resetPending ? '<span class="status-badge status-in_progress" style="margin-left:6px;">Réinit. en attente</span>' : ""}</span>
-      <button class="mi-del" data-id="${m.id}" ${resetPending ? "disabled" : ""}>Réinitialiser le code</button>
+      <span class="mi-name">${escapeHtml(m.pseudo)}${resetPending ? ' <span class="status-badge status-in_progress" style="margin-left:6px;">Réinit. en attente</span>' : ""}</span>
+      <button class="mi-reset btn-ghost btn-small" data-id="${m.id}" data-pseudo="${escapeHtml(m.pseudo)}" ${resetPending ? "disabled" : ""} style="color:var(--warn);font-size:12px;">Réinitialiser</button>
+      <button class="mi-del" data-id="${m.id}" data-pseudo="${escapeHtml(m.pseudo)}">Supprimer</button>
     `;
     if(!resetPending){
-      li.querySelector(".mi-del").addEventListener("click", async () => {
-        if(!confirm(`Réinitialiser le code personnel de "${m.pseudo}" ? Il pourra en choisir un nouveau à sa prochaine connexion.`)) return;
+      li.querySelector(".mi-reset").addEventListener("click", async (e) => {
+        const pseudo = e.currentTarget.dataset.pseudo;
+        if(!confirm(`Réinitialiser le code personnel de "${pseudo}" ? Il pourra en choisir un nouveau à sa prochaine connexion.`)) return;
         try{
           await updateDoc(doc(membersCol(state.coproId), m.id), { personalCodeReset: true });
           toast("Code personnel réinitialisé", "success");
-        }catch(e){ console.error(e); toast("Erreur", "error"); }
+        }catch(err){ console.error(err); toast("Erreur", "error"); }
       });
     }
+    li.querySelector(".mi-del").addEventListener("click", async (e) => {
+      const pseudo = e.currentTarget.dataset.pseudo;
+      if(!confirm(`Supprimer définitivement le compte de "${pseudo}" ? Ses signalements existants seront conservés.`)) return;
+      try{
+        await deleteDoc(doc(membersCol(state.coproId), m.id));
+        toast(`Compte de "${pseudo}" supprimé`, "success");
+      }catch(err){ console.error(err); toast("Erreur lors de la suppression", "error"); }
+    });
     ul.appendChild(li);
   });
+}
+
+// =========================================================
+// SUPPRESSION: COMPTE RESIDENT (par lui-même)
+// =========================================================
+async function onDeleteMyAccount(){
+  if(!state.memberId){
+    toast("Impossible : aucun compte local trouvé.", "error");
+    return;
+  }
+  const confirmed = confirm(
+    `Supprimer votre compte "${state.pseudo}" ?\n\n` +
+    `Vos signalements seront conservés dans l'historique mais ne seront plus liés à votre identité.\n\n` +
+    `Cette action est irréversible.`
+  );
+  if(!confirmed) return;
+  try{
+    await deleteDoc(doc(membersCol(state.coproId), state.memberId));
+    toast("Compte supprimé. Au revoir !", "success");
+    logout();
+  }catch(err){
+    console.error(err);
+    toast("Erreur lors de la suppression de votre compte.", "error");
+  }
+}
+
+// =========================================================
+// SUPPRESSION: COPROPRIETE COMPLETE (par l'admin)
+// Supprime en cascade : members, groups, types, reports
+// (et leurs sous-collections history). Opération en batch.
+// =========================================================
+async function onDeleteCopro(){
+  const coproName = state.coproName;
+  const firstConfirm = confirm(
+    `⚠ Supprimer la copropriété "${coproName}" ?\n\n` +
+    `Cette action supprimera DÉFINITIVEMENT :\n` +
+    `• Tous les signalements et leur historique\n` +
+    `• Tous les lieux et types d'incidents\n` +
+    `• Tous les comptes résidents\n\n` +
+    `Cette action est IRRÉVERSIBLE.`
+  );
+  if(!firstConfirm) return;
+
+  const secondConfirm = confirm(
+    `Dernière confirmation :\n\nTaper OK pour supprimer définitivement "${coproName}" et toutes ses données.`
+  );
+  if(!secondConfirm) return;
+
+  // Désactiver le bouton pendant l'opération
+  const btn = $("btnDeleteCopro");
+  if(btn){ btn.disabled = true; btn.textContent = "Suppression en cours…"; }
+
+  try{
+    // Suppression en cascade des sous-collections puis du document copro
+    // Note : Firestore ne supprime pas automatiquement les sous-collections
+    // quand on supprime un document parent — on doit le faire manuellement.
+    const coproId = state.coproId;
+
+    // 1. Lire et supprimer tous les reports + leur historique
+    const reportsSnap = await getDocs(reportsCol(coproId));
+    for(const reportDoc of reportsSnap.docs){
+      const histSnap = await getDocs(historyCol(coproId, reportDoc.id));
+      for(const h of histSnap.docs) await deleteDoc(h.ref);
+      await deleteDoc(reportDoc.ref);
+    }
+
+    // 2. Supprimer les autres sous-collections (groups, types, members)
+    const collectionsToDelete = [groupsCol(coproId), typesCol(coproId), membersCol(coproId)];
+    for(const col of collectionsToDelete){
+      const snap = await getDocs(col);
+      for(const d of snap.docs) await deleteDoc(d.ref);
+    }
+
+    // 3. Supprimer le document copropriété lui-même
+    await deleteDoc(coproRef(coproId));
+
+    toast(`"${coproName}" supprimée.`, "success");
+    logout();
+  }catch(err){
+    console.error(err);
+    toast("Erreur lors de la suppression. Réessayez.", "error");
+    if(btn){ btn.disabled = false; btn.textContent = "Supprimer toute la copropriété"; }
+  }
 }
 
 // =========================================================
