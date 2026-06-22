@@ -245,6 +245,21 @@ h1,h2,h3{ margin:0; }
 .field-label{ font-size:13px; font-weight:600; color:var(--ink-soft); }
 .field-hint{ font-size:12px; color:var(--meta); line-height:1.4; margin-top:-2px; }
 
+/* wrapper input + bouton œil (toggle visibilité) */
+.input-wrap{
+  position:relative; display:flex; align-items:center;
+}
+.input-wrap .input{ padding-right:44px; }
+.btn-eye{
+  position:absolute; right:12px;
+  background:none; border:none; cursor:pointer;
+  color:var(--meta); padding:4px; border-radius:6px;
+  line-height:1; font-size:18px;
+  transition:color .15s;
+  user-select:none;
+}
+.btn-eye:hover{ color:var(--ink); }
+
 .input{
   width:100%;
   border:2px solid var(--line);
@@ -582,7 +597,10 @@ h1,h2,h3{ margin:0; }
     <form id="formJoin" class="stack-form">
       <label class="field">
         <span class="field-label">Code d'accès de la copropriété</span>
-        <input id="joinCode" type="text" inputmode="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
+        <div class="input-wrap">
+          <input id="joinCode" type="text" inputmode="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
+          <button type="button" class="btn-eye" data-target="joinCode" aria-label="Afficher/masquer">👁</button>
+        </div>
       </label>
       <label class="field">
         <span class="field-label">Votre pseudo</span>
@@ -590,7 +608,10 @@ h1,h2,h3{ margin:0; }
       </label>
       <label class="field">
         <span class="field-label">Code personnel</span>
-        <input id="joinPersonalCode" type="text" inputmode="text" autocomplete="off" placeholder="4 caractères min." required class="input input-code" maxlength="20" minlength="4">
+        <div class="input-wrap">
+          <input id="joinPersonalCode" type="text" inputmode="text" autocomplete="off" placeholder="4 caractères min." required class="input input-code" maxlength="20" minlength="4">
+          <button type="button" class="btn-eye" data-target="joinPersonalCode" aria-label="Afficher/masquer">👁</button>
+        </div>
         <span class="field-hint">À inventer librement la première fois (sert à vous reconnecter ensuite, même depuis un autre appareil).</span>
       </label>
       <p id="joinError" class="form-error" hidden></p>
@@ -628,11 +649,17 @@ h1,h2,h3{ margin:0; }
       </label>
       <label class="field">
         <span class="field-label">Code d'accès résidents (modifiable plus tard)</span>
-        <input id="createCode" type="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
+        <div class="input-wrap">
+          <input id="createCode" type="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
+          <button type="button" class="btn-eye" data-target="createCode" aria-label="Afficher/masquer">👁</button>
+        </div>
       </label>
       <label class="field">
         <span class="field-label">Mot de passe administrateur</span>
-        <input id="createAdminPass" type="password" autocomplete="new-password" placeholder="Au moins 6 caractères" required class="input" minlength="6">
+        <div class="input-wrap">
+          <input id="createAdminPass" type="password" autocomplete="new-password" placeholder="Au moins 6 caractères" required class="input" minlength="6">
+          <button type="button" class="btn-eye" data-target="createAdminPass" aria-label="Afficher/masquer">👁</button>
+        </div>
       </label>
       <label class="field">
         <span class="field-label">Votre pseudo (admin)</span>
@@ -658,11 +685,17 @@ h1,h2,h3{ margin:0; }
     <form id="formAdminLogin" class="stack-form">
       <label class="field">
         <span class="field-label">Code d'accès de la copropriété</span>
-        <input id="adminLoginCode" type="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
+        <div class="input-wrap">
+          <input id="adminLoginCode" type="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
+          <button type="button" class="btn-eye" data-target="adminLoginCode" aria-label="Afficher/masquer">👁</button>
+        </div>
       </label>
       <label class="field">
         <span class="field-label">Mot de passe administrateur</span>
-        <input id="adminLoginPass" type="password" autocomplete="current-password" required class="input">
+        <div class="input-wrap">
+          <input id="adminLoginPass" type="password" autocomplete="current-password" required class="input">
+          <button type="button" class="btn-eye" data-target="adminLoginPass" aria-label="Afficher/masquer">👁</button>
+        </div>
       </label>
       <p id="adminLoginError" class="form-error" hidden></p>
       <button type="submit" class="btn-primary btn-large btn-full">
@@ -777,14 +810,20 @@ h1,h2,h3{ margin:0; }
         <h3>Code d'accès résidents</h3>
         <p class="settings-help">Changer ce code n'affecte pas les résidents déjà connectés. Seules les nouvelles connexions devront utiliser le nouveau code.</p>
         <form id="formSettingsCode" class="inline-form">
-          <input id="settingsCode" type="text" class="input input-code" maxlength="40" required>
+          <div class="input-wrap">
+            <input id="settingsCode" type="text" class="input input-code" maxlength="40" required>
+            <button type="button" class="btn-eye" data-target="settingsCode" aria-label="Afficher/masquer">👁</button>
+          </div>
           <button type="submit" class="btn-outline">Mettre à jour</button>
         </form>
       </div>
       <div class="settings-card settings-danger">
         <h3>Mot de passe administrateur</h3>
         <form id="formSettingsPass" class="inline-form">
-          <input id="settingsPass" type="password" class="input" placeholder="Nouveau mot de passe (6 car. min.)" minlength="6">
+          <div class="input-wrap">
+            <input id="settingsPass" type="password" class="input" placeholder="Nouveau mot de passe (6 car. min.)" minlength="6">
+            <button type="button" class="btn-eye" data-target="settingsPass" aria-label="Afficher/masquer">👁</button>
+          </div>
           <button type="submit" class="btn-outline">Changer</button>
         </form>
       </div>
@@ -1048,6 +1087,27 @@ function bindStaticEvents(){
   $("btnGoCreate").addEventListener("click", () => showScreen("screenCreate"));
   $("btnGoAdminLogin").addEventListener("click", () => showScreen("screenAdminLogin"));
   $("btnForgotCode").addEventListener("click", () => showScreen("screenForgotCode"));
+
+  // Boutons œil : toggle visibilité des champs sensibles (codes et mots de passe)
+  // État initial : tous les champs .input-code commencent masqués (type=password)
+  // pour que l'œil soit cohérent indépendamment du type HTML d'origine.
+  document.querySelectorAll(".btn-eye").forEach(btn => {
+    const input = document.getElementById(btn.dataset.target);
+    if(!input) return;
+    // Masquer initialement les champs de type code (text → password)
+    if(input.classList.contains("input-code")){
+      input.type = "password";
+      input.dataset.masked = "true";
+    }
+    btn.addEventListener("click", () => {
+      const isVisible = input.type === "text";
+      input.type = isVisible ? "password" : "text";
+      input.dataset.masked = isVisible ? "true" : "false";
+      btn.textContent = isVisible ? "👁" : "🙈";
+      btn.setAttribute("aria-label", isVisible ? "Afficher" : "Masquer");
+      input.focus();
+    });
+  });
 
   document.querySelectorAll("[data-back]").forEach(btn => {
     btn.addEventListener("click", () => showScreen(btn.dataset.back));
