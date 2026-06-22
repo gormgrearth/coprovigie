@@ -1103,7 +1103,7 @@ function bindStaticEvents(){
       const isVisible = input.type === "text";
       input.type = isVisible ? "password" : "text";
       input.dataset.masked = isVisible ? "true" : "false";
-      btn.textContent = isVisible ? "👁" : "🙈";
+      btn.textContent = isVisible ? "👁" : "🔒";
       btn.setAttribute("aria-label", isVisible ? "Afficher" : "Masquer");
       input.focus();
     });
