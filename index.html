@@ -345,17 +345,24 @@ h1,h2,h3{ margin:0; }
 }
 .report-card{
   display:flex; align-items:flex-start; gap:14px;
-  background:var(--paper-raised);
-  border:1.5px solid var(--line-soft);
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--group-color, transparent) 8%, var(--paper-raised)),
+      var(--paper-raised) 70%
+    );
+  border:1.5px solid color-mix(in srgb, var(--group-color, var(--line-soft)) 30%, var(--line-soft));
   border-left:4px solid var(--group-color, var(--line-soft));
   border-radius:var(--radius-m);
   padding:14px 16px;
   box-shadow:var(--shadow-card);
   text-align:left;
   width:100%;
-  transition: border-color .15s ease;
+  transition: border-color .15s ease, background .15s ease;
 }
-.report-card:hover{ border-color:var(--line); border-left-color:var(--group-color, var(--line)); }
+.report-card:hover{
+  border-color:color-mix(in srgb, var(--group-color, var(--line)) 50%, var(--line));
+  border-left-color:var(--group-color, var(--line));
+}
 .group-dot{
   display:inline-block; width:8px; height:8px; border-radius:50%;
   margin-right:5px; vertical-align:middle; position:relative; top:-1px;
@@ -1685,9 +1692,11 @@ function renderTypeGrid(){
 // =========================================================
 const MAX_REPORT_PHOTOS = 3;
 
-// Redimensionne et compresse une image côté client (évite des fichiers
-// trop lourds pour Firebase Storage / la connexion mobile de l'utilisateur).
-function resizeImageFile(file, maxSize = 1280, quality = 0.75){
+// Redimensionne et compresse une image côté client.
+// Cible : largeur max 800 px, qualité JPEG 0.65, taille finale ≤ 200 Ko.
+// Si la première compression dépasse 200 Ko, une seconde passe abaisse
+// la qualité progressivement jusqu'à rentrer dans la limite.
+function resizeImageFile(file, maxSize = 800, quality = 0.65){
   return new Promise((resolve, reject) => {
     const img = new Image();
     const reader = new FileReader();
@@ -1700,13 +1709,24 @@ function resizeImageFile(file, maxSize = 1280, quality = 0.75){
         }
         const canvas = document.createElement("canvas");
         canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", quality);
-        canvas.toBlob((blob) => {
-          if(!blob){ reject(new Error("Conversion image impossible")); return; }
-          resolve({ blob, dataUrl });
-        }, "image/jpeg", quality);
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+
+        // Première tentative avec la qualité cible
+        function tryEncode(q){
+          canvas.toBlob((blob) => {
+            if(!blob){ reject(new Error("Conversion image impossible")); return; }
+            const MAX_BYTES = 200 * 1024; // 200 Ko
+            if(blob.size <= MAX_BYTES || q <= 0.3){
+              // Dans la limite ou qualité minimale atteinte → on accepte
+              const dataUrl = canvas.toDataURL("image/jpeg", q);
+              resolve({ blob, dataUrl });
+            } else {
+              // Trop lourd → nouvelle passe avec qualité réduite de 0.1
+              tryEncode(Math.round((q - 0.1) * 10) / 10);
+            }
+          }, "image/jpeg", q);
+        }
+        tryEncode(quality);
       };
       img.onerror = () => reject(new Error("Image invalide"));
       img.src = reader.result;
@@ -1732,7 +1752,7 @@ function createPhotoPickerField(holder, label = "Photos (facultatif, 3 max)"){
         <span class="photo-add-ic">📷</span>
         <span>Ajouter une photo</span>
       </button>
-      <input type="file" accept="image/*" capture="environment" hidden>
+      <input type="file" accept="image/*" hidden>
     </div>
   `;
   const previewsEl = wrap.querySelector(".photo-previews");
