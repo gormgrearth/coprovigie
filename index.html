@@ -482,6 +482,65 @@ h1,h2,h3{ margin:0; }
   border-radius:var(--radius-s); padding:13px 14px; font-size:14px; margin-top:6px;
 }
 
+/* sélecteur de photos (signalement) */
+.photo-picker{ display:flex; flex-direction:column; gap:10px; }
+.photo-previews{ display:flex; gap:8px; flex-wrap:wrap; }
+.photo-thumb{
+  position:relative; width:72px; height:72px;
+  border-radius:var(--radius-s); overflow:hidden;
+  border:1.5px solid var(--line-soft); background:var(--paper-raised);
+}
+.photo-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+.photo-thumb-remove{
+  position:absolute; top:3px; right:3px;
+  width:20px; height:20px; border-radius:50%;
+  background:rgba(28,43,46,.75); color:#fff; border:none;
+  font-size:11px; line-height:1; display:flex; align-items:center; justify-content:center;
+}
+.photo-thumb-remove:hover{ background:var(--signal-dark); }
+.photo-add-btn{
+  display:inline-flex; align-items:center; gap:8px;
+  align-self:flex-start;
+  background:var(--paper-raised); border:1.5px dashed var(--line);
+  color:var(--ink-soft); font-weight:600; font-size:13.5px;
+  border-radius:var(--radius-s); padding:10px 14px;
+}
+.photo-add-btn:hover{ border-color:var(--ink); color:var(--ink); }
+.photo-add-btn:disabled{ opacity:.45; cursor:not-allowed; }
+.photo-add-ic{ font-size:15px; }
+
+/* galerie de photos (détail signalement) */
+.detail-photos{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.detail-photo-thumb{
+  width:84px; height:84px; border-radius:var(--radius-s); overflow:hidden;
+  border:1.5px solid var(--line-soft); background:var(--paper-raised);
+}
+.detail-photo-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+
+.lightbox-overlay{
+  position:fixed; inset:0; z-index:60;
+  background:rgba(28,43,46,.92);
+  display:flex; align-items:center; justify-content:center;
+  padding:24px; animation: fadeIn .15s ease both;
+}
+.lightbox-overlay img{
+  max-width:100%; max-height:100%; border-radius:var(--radius-m);
+  box-shadow:var(--shadow-pop);
+}
+.lightbox-close{
+  position:absolute; top:18px; right:18px;
+  width:36px; height:36px; border-radius:50%;
+  background:rgba(255,255,255,.15); border:none; color:#fff; font-size:16px;
+}
+.lightbox-close:hover{ background:rgba(255,255,255,.3); }
+
+/* miniature photo dans la carte de signalement (liste) */
+.report-photo-strip{ display:flex; gap:6px; margin-top:6px; }
+.report-photo-strip img{
+  width:44px; height:44px; object-fit:cover; border-radius:8px;
+  border:1.5px solid var(--line-soft);
+}
+
 /* historique des changements de statut */
 .history-list{ display:flex; flex-direction:column; gap:8px; max-height:240px; overflow-y:auto; }
 .history-item{
@@ -849,6 +908,17 @@ h1,h2,h3{ margin:0; }
         <span class="field-label">Commentaire (facultatif)</span>
         <textarea id="reportComment" class="input textarea" rows="3" maxlength="500" placeholder="Précisez si besoin : étage, gravité, depuis quand…"></textarea>
       </label>
+      <div class="field">
+        <span class="field-label">Photos (facultatif, 3 max)</span>
+        <div class="photo-picker">
+          <div id="photoPreviews" class="photo-previews"></div>
+          <button type="button" id="btnAddPhoto" class="photo-add-btn">
+            <span class="photo-add-ic">📷</span>
+            <span>Ajouter une photo</span>
+          </button>
+          <input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
+        </div>
+      </div>
       <button type="submit" class="btn-primary btn-large btn-full">
         <span>Confirmer le signalement</span>
         <span class="btn-spinner" hidden></span>
@@ -881,6 +951,9 @@ import {
   updateDoc, deleteDoc, query, where, orderBy, onSnapshot,
   serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+import {
+  getStorage, ref as storageRef, uploadBytes, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-storage.js";
 
 // --- Config Firebase ---
 const firebaseConfig = {
@@ -898,11 +971,12 @@ const firebaseConfig = {
 // ---------------------------------------------------------
 // INIT FIREBASE
 // ---------------------------------------------------------
-let app, db;
+let app, db, storage;
 let firebaseReady = false;
 try{
   app = initializeApp(firebaseConfig);
   db = getFirestore(app);
+  storage = getStorage(app);
   firebaseReady = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "VOTRE_API_KEY";
 }catch(e){
   console.error("Firebase init error", e);
@@ -947,6 +1021,7 @@ let state = {
   unsubTypes: null,
   unsubMembers: null,
   pendingType: null, // type en cours de signalement (pour la modale)
+  pendingPhotos: [], // fichiers photos en attente (max 3) pour la modale de signalement
 };
 
 function generateMemberId(){
@@ -1119,6 +1194,8 @@ function bindStaticEvents(){
   $("formCreate").addEventListener("submit", onCreateSubmit);
   $("formAdminLogin").addEventListener("submit", onAdminLoginSubmit);
   $("formReport").addEventListener("submit", onReportSubmit);
+  $("btnAddPhoto").addEventListener("click", () => $("photoInput").click());
+  $("photoInput").addEventListener("change", onPhotoInputChange);
   $("formAddGroup").addEventListener("submit", onAddGroup);
   $("formAddType").addEventListener("submit", onAddType);
   $("formSettingsName").addEventListener("submit", onSettingsName);
@@ -1136,8 +1213,8 @@ function bindStaticEvents(){
   $("btnBackToDash").addEventListener("click", () => showScreen("screenDashboard"));
 
   // Modals
-  $("modalClose").addEventListener("click", () => hide($("reportModal")));
-  $("reportModal").addEventListener("click", (e) => { if(e.target.id === "reportModal") hide($("reportModal")); });
+  $("modalClose").addEventListener("click", () => { state.pendingPhotos = []; hide($("reportModal")); });
+  $("reportModal").addEventListener("click", (e) => { if(e.target.id === "reportModal"){ state.pendingPhotos = []; hide($("reportModal")); } });
   $("detailModalClose").addEventListener("click", () => hide($("detailModal")));
   $("detailModal").addEventListener("click", (e) => { if(e.target.id === "detailModal") hide($("detailModal")); });
 
@@ -1540,8 +1617,95 @@ function openReportModal(type){
     : groupSel.options[groupSel.selectedIndex].textContent;
   $("modalSub").textContent = `${state.coproName} · ${groupLabel}`;
   $("reportComment").value = "";
+  state.pendingPhotos = [];
+  renderPhotoPreviews();
   show($("reportModal"));
   setTimeout(() => $("reportComment").focus(), 150);
+}
+
+// =========================================================
+// PHOTOS DU SIGNALEMENT (jusqu'à 3, redimensionnées côté client)
+// =========================================================
+const MAX_REPORT_PHOTOS = 3;
+
+function renderPhotoPreviews(){
+  const wrap = $("photoPreviews");
+  const addBtn = $("btnAddPhoto");
+  if(!wrap) return;
+  wrap.innerHTML = "";
+  state.pendingPhotos.forEach((p, i) => {
+    const div = document.createElement("div");
+    div.className = "photo-thumb";
+    div.innerHTML = `
+      <img src="${p.dataUrl}" alt="Photo ${i + 1}">
+      <button type="button" class="photo-thumb-remove" aria-label="Retirer cette photo">✕</button>
+    `;
+    div.querySelector(".photo-thumb-remove").addEventListener("click", () => {
+      state.pendingPhotos.splice(i, 1);
+      renderPhotoPreviews();
+    });
+    wrap.appendChild(div);
+  });
+  if(addBtn){
+    addBtn.disabled = state.pendingPhotos.length >= MAX_REPORT_PHOTOS;
+    addBtn.querySelector("span:last-child").textContent =
+      state.pendingPhotos.length >= MAX_REPORT_PHOTOS
+        ? "Limite de 3 photos atteinte"
+        : "Ajouter une photo";
+  }
+}
+
+// Redimensionne et compresse une image côté client (évite des fichiers
+// trop lourds pour Firebase Storage / la connexion mobile de l'utilisateur).
+function resizeImageFile(file, maxSize = 1280, quality = 0.75){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = () => {
+      img.onload = () => {
+        let { width, height } = img;
+        if(width > maxSize || height > maxSize){
+          if(width > height){ height = Math.round(height * (maxSize / width)); width = maxSize; }
+          else{ width = Math.round(width * (maxSize / height)); height = maxSize; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        canvas.toBlob((blob) => {
+          if(!blob){ reject(new Error("Conversion image impossible")); return; }
+          resolve({ blob, dataUrl });
+        }, "image/jpeg", quality);
+      };
+      img.onerror = () => reject(new Error("Image invalide"));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error("Lecture du fichier impossible"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onPhotoInputChange(e){
+  const file = e.target.files && e.target.files[0];
+  e.target.value = ""; // permet de resélectionner la même photo ensuite
+  if(!file) return;
+  if(state.pendingPhotos.length >= MAX_REPORT_PHOTOS){
+    toast("Vous pouvez ajouter 3 photos maximum.", "error");
+    return;
+  }
+  if(!file.type.startsWith("image/")){
+    toast("Veuillez sélectionner une image.", "error");
+    return;
+  }
+  try{
+    const { blob, dataUrl } = await resizeImageFile(file);
+    state.pendingPhotos.push({ blob, dataUrl });
+    renderPhotoPreviews();
+  }catch(err){
+    console.error(err);
+    toast("Impossible de charger cette photo.", "error");
+  }
 }
 
 async function onReportSubmit(e){
@@ -1560,21 +1724,42 @@ async function onReportSubmit(e){
   }
 
   const comment = $("reportComment").value.trim();
+  const photosToUpload = state.pendingPhotos.slice();
 
   setBtnLoading(btn, true);
   try{
-    await addDoc(reportsCol(state.coproId), {
+    const reportRef = await addDoc(reportsCol(state.coproId), {
       typeName: state.pendingType.name,
       typeIcon: state.pendingType.icon || "❗",
       groupId: groupId,
       groupName: groupName,
       comment: comment || "",
+      photos: [],
       author: state.pseudo,
       authorId: state.memberId || null,
       status: "reported",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+
+    if(photosToUpload.length > 0){
+      try{
+        const urls = [];
+        for(let i = 0; i < photosToUpload.length; i++){
+          const path = `coprovigie/${state.coproId}/reports/${reportRef.id}/photo_${i}_${Date.now()}.jpg`;
+          const sRef = storageRef(storage, path);
+          await uploadBytes(sRef, photosToUpload[i].blob, { contentType: "image/jpeg" });
+          const url = await getDownloadURL(sRef);
+          urls.push(url);
+        }
+        await updateDoc(reportRef, { photos: urls });
+      }catch(uploadErr){
+        console.error(uploadErr);
+        toast("Signalement envoyé, mais l'envoi des photos a échoué.", "error");
+      }
+    }
+
+    state.pendingPhotos = [];
     hide($("reportModal"));
     toast("Signalement envoyé. Merci !", "success");
   }catch(err){
@@ -1621,6 +1806,7 @@ function reportCardEl(r, isAdminView){
       </div>
       <div class="report-meta">${escapeHtml(r.groupName || "")} · ${formatDate(r.createdAt)}</div>
       ${r.comment ? `<div class="report-comment">${escapeHtml(r.comment)}</div>` : ""}
+      ${r.photos && r.photos.length ? `<div class="report-photo-strip">${r.photos.slice(0,3).map(u => `<img src="${u}" alt="Photo du signalement">`).join("")}</div>` : ""}
       <div class="report-author">Signalé par ${escapeHtml(r.author || "anonyme")}</div>
     </div>
   `;
@@ -1637,6 +1823,22 @@ function canEditReport(r){
   if(state.isAdmin) return true;
   if(!state.memberId) return false;
   return r.authorId === state.memberId;
+}
+
+// =========================================================
+// LIGHTBOX: AFFICHAGE PLEIN ECRAN D'UNE PHOTO
+// =========================================================
+function openLightbox(url){
+  const overlay = document.createElement("div");
+  overlay.className = "lightbox-overlay";
+  overlay.innerHTML = `
+    <button type="button" class="lightbox-close" aria-label="Fermer">✕</button>
+    <img src="${url}" alt="Photo du signalement en grand">
+  `;
+  const close = () => overlay.remove();
+  overlay.addEventListener("click", (e) => { if(e.target === overlay) close(); });
+  overlay.querySelector(".lightbox-close").addEventListener("click", close);
+  document.body.appendChild(overlay);
 }
 
 // =========================================================
@@ -1664,6 +1866,7 @@ function openDetailModal(r, isAdminView){
       <div><strong>Date :</strong> ${formatDate(r.createdAt)}</div>
     </div>
     ${r.comment ? `<div class="detail-comment-box">${escapeHtml(r.comment)}</div>` : `<p class="settings-help">Aucun commentaire.</p>`}
+    ${r.photos && r.photos.length ? `<div class="detail-photos">${r.photos.map((u,i) => `<button type="button" class="detail-photo-thumb" data-url="${u}"><img src="${u}" alt="Photo ${i+1} du signalement"></button>`).join("")}</div>` : ""}
 
     <div class="dash-divider" style="margin-top:24px;"><span>Historique</span></div>
     <div id="historyList" class="history-list">
@@ -1677,6 +1880,11 @@ function openDetailModal(r, isAdminView){
       </div>
     ` : ""}
   `;
+
+  // --- Photos : ouverture en grand (lightbox) ---
+  content.querySelectorAll(".detail-photo-thumb").forEach(btn => {
+    btn.addEventListener("click", () => openLightbox(btn.dataset.url));
+  });
 
   // --- Changement de statut : ouvert à tout résident connecté ---
   content.querySelectorAll(".detail-status-btn").forEach(btn => {
