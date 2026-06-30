@@ -347,6 +347,7 @@ h1,h2,h3{ margin:0; }
   display:flex; align-items:flex-start; gap:14px;
   background:var(--paper-raised);
   border:1.5px solid var(--line-soft);
+  border-left:4px solid var(--group-color, var(--line-soft));
   border-radius:var(--radius-m);
   padding:14px 16px;
   box-shadow:var(--shadow-card);
@@ -354,7 +355,11 @@ h1,h2,h3{ margin:0; }
   width:100%;
   transition: border-color .15s ease;
 }
-.report-card:hover{ border-color:var(--line); }
+.report-card:hover{ border-color:var(--line); border-left-color:var(--group-color, var(--line)); }
+.group-dot{
+  display:inline-block; width:8px; height:8px; border-radius:50%;
+  margin-right:5px; vertical-align:middle; position:relative; top:-1px;
+}
 .report-ic{
   width:38px; height:38px; flex-shrink:0;
   border-radius:10px; background:var(--signal-tint); color:var(--signal-dark);
@@ -406,12 +411,25 @@ h1,h2,h3{ margin:0; }
   border-radius:var(--radius-s); padding:11px 14px;
 }
 .manage-item .mi-ic{ font-size:18px; width:24px; text-align:center; }
+.manage-item .mi-color{
+  width:28px; height:28px; padding:0; border:1.5px solid var(--line-soft);
+  border-radius:50%; overflow:hidden; cursor:pointer; flex:0 0 auto; background:none;
+}
+.manage-item .mi-color::-webkit-color-swatch-wrapper{ padding:0; }
+.manage-item .mi-color::-webkit-color-swatch{ border:none; border-radius:50%; }
 .manage-item .mi-name{ flex:1; font-weight:600; font-size:14px; }
 .manage-item .mi-del{
   background:none; border:none; color:var(--meta); font-size:13px; font-weight:600;
   padding:4px 8px; border-radius:6px;
 }
 .manage-item .mi-del:hover{ color:var(--signal-dark); background:var(--signal-tint); }
+
+.old-resolved-toggle{
+  display:flex; align-items:center; gap:8px;
+  font-size:13px; color:var(--ink-soft); font-weight:500;
+  margin:-6px 0 10px; cursor:pointer; user-select:none;
+}
+.old-resolved-toggle input{ width:16px; height:16px; accent-color:var(--ink); cursor:pointer; }
 
 .settings-card{
   background:var(--paper-raised); border:1.5px solid var(--line-soft);
@@ -551,6 +569,8 @@ h1,h2,h3{ margin:0; }
 .history-meta{ font-size:11px; color:var(--meta); font-family:var(--mono); }
 .history-author{ font-size:12px; color:var(--ink-soft); font-weight:600; }
 .history-comment{ font-size:13px; color:var(--ink-soft); margin-top:5px; }
+.history-photos{ margin-top:8px; }
+.history-photos .detail-photo-thumb{ width:56px; height:56px; }
 
 /* =========================================================
    TOAST
@@ -793,6 +813,11 @@ h1,h2,h3{ margin:0; }
       <button class="chip" data-filter="resolved">Résolus</button>
     </div>
 
+    <label id="oldResolvedToggleWrap" class="old-resolved-toggle" hidden>
+      <input type="checkbox" id="showOldResolved">
+      <span>Afficher aussi les signalements résolus de plus de <span id="oldResolvedDaysLabel">—</span> jours</span>
+    </label>
+
     <div id="reportsList" class="reports-list">
       <p class="empty-state">Chargement des signalements…</p>
     </div>
@@ -826,6 +851,10 @@ h1,h2,h3{ margin:0; }
         <button class="chip" data-afilter="in_progress">En cours</button>
         <button class="chip" data-afilter="resolved">Résolus</button>
       </div>
+      <label id="adminOldResolvedToggleWrap" class="old-resolved-toggle" hidden>
+        <input type="checkbox" id="adminShowOldResolved">
+        <span>Afficher aussi les signalements résolus de plus de <span id="adminOldResolvedDaysLabel">—</span> jours</span>
+      </label>
       <div id="adminReportsList" class="reports-list">
         <p class="empty-state">Chargement…</p>
       </div>
@@ -876,6 +905,14 @@ h1,h2,h3{ margin:0; }
           <button type="submit" class="btn-outline">Mettre à jour</button>
         </form>
       </div>
+      <div class="settings-card">
+        <h3>Masquer les signalements résolus anciens</h3>
+        <p class="settings-help">Les signalements résolus depuis plus longtemps que ce délai sont masqués par défaut dans les listes (résidents et admin). Chacun garde la possibilité de les réafficher via une case à cocher. Laissez vide ou 0 pour ne jamais les masquer.</p>
+        <form id="formSettingsAutoHide" class="inline-form">
+          <input id="settingsAutoHideDays" type="number" min="0" step="1" class="input" placeholder="Ex. 30" style="max-width:120px;">
+          <button type="submit" class="btn-outline">Enregistrer</button>
+        </form>
+      </div>
       <div class="settings-card settings-danger">
         <h3>Mot de passe administrateur</h3>
         <form id="formSettingsPass" class="inline-form">
@@ -908,17 +945,6 @@ h1,h2,h3{ margin:0; }
         <span class="field-label">Commentaire (facultatif)</span>
         <textarea id="reportComment" class="input textarea" rows="3" maxlength="500" placeholder="Précisez si besoin : étage, gravité, depuis quand…"></textarea>
       </label>
-      <div class="field">
-        <span class="field-label">Photos (facultatif, 3 max)</span>
-        <div class="photo-picker">
-          <div id="photoPreviews" class="photo-previews"></div>
-          <button type="button" id="btnAddPhoto" class="photo-add-btn">
-            <span class="photo-add-ic">📷</span>
-            <span>Ajouter une photo</span>
-          </button>
-          <input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
-        </div>
-      </div>
       <button type="submit" class="btn-primary btn-large btn-full">
         <span>Confirmer le signalement</span>
         <span class="btn-spinner" hidden></span>
@@ -1020,9 +1046,22 @@ let state = {
   unsubGroups: null,
   unsubTypes: null,
   unsubMembers: null,
+  unsubCoproSettings: null,
   pendingType: null, // type en cours de signalement (pour la modale)
   pendingPhotos: [], // fichiers photos en attente (max 3) pour la modale de signalement
+  autoHideResolvedDays: 0, // 0 = désactivé. Masque les signalements résolus depuis plus de X jours.
+  showOldResolved: false,  // case à cocher locale (session) pour réafficher ceux masqués
 };
+
+// Palette de couleurs proposées par défaut pour identifier rapidement
+// un bâtiment / lieu. Une nouvelle couleur est piochée à la création.
+const GROUP_COLOR_PALETTE = [
+  "#E07A5F", "#3D9A8B", "#577590", "#F2A359", "#9B5DE5",
+  "#43AA8B", "#D64545", "#277DA1", "#C77DFF", "#6A994E",
+];
+function pickGroupColor(){
+  return GROUP_COLOR_PALETTE[state.groups.length % GROUP_COLOR_PALETTE.length];
+}
 
 function generateMemberId(){
   // ID local unique, indépendant du pseudo (qui peut être affiché/changé),
@@ -1194,12 +1233,11 @@ function bindStaticEvents(){
   $("formCreate").addEventListener("submit", onCreateSubmit);
   $("formAdminLogin").addEventListener("submit", onAdminLoginSubmit);
   $("formReport").addEventListener("submit", onReportSubmit);
-  $("btnAddPhoto").addEventListener("click", () => $("photoInput").click());
-  $("photoInput").addEventListener("change", onPhotoInputChange);
   $("formAddGroup").addEventListener("submit", onAddGroup);
   $("formAddType").addEventListener("submit", onAddType);
   $("formSettingsName").addEventListener("submit", onSettingsName);
   $("formSettingsCode").addEventListener("submit", onSettingsCode);
+  $("formSettingsAutoHide").addEventListener("submit", onSettingsAutoHide);
   $("formSettingsPass").addEventListener("submit", onSettingsPass);
 
   // Topbar
@@ -1235,6 +1273,20 @@ function bindStaticEvents(){
       state.adminFilter = chip.dataset.afilter;
       renderAdminReportsList();
     });
+  });
+
+  // Case "afficher les anciens résolus" (synchronisée entre vue résident et admin)
+  $("showOldResolved").addEventListener("change", (e) => {
+    state.showOldResolved = e.target.checked;
+    $("adminShowOldResolved").checked = state.showOldResolved;
+    renderReportsList();
+    renderAdminReportsList();
+  });
+  $("adminShowOldResolved").addEventListener("change", (e) => {
+    state.showOldResolved = e.target.checked;
+    $("showOldResolved").checked = state.showOldResolved;
+    renderReportsList();
+    renderAdminReportsList();
   });
 
   // Admin tabs
@@ -1510,6 +1562,7 @@ function enterCoproSpace(){
   listenGroups();
   listenTypes();
   listenReports();
+  listenCoproSettings();
   if(state.isAdmin) listenMembers();
 
   showScreen("screenDashboard");
@@ -1526,6 +1579,25 @@ function listenGroups(){
     renderGroupSelect();
     renderGroupsAdminList();
   }, (err) => console.error("groups listener", err));
+}
+
+function listenCoproSettings(){
+  if(state.unsubCoproSettings) state.unsubCoproSettings();
+  state.unsubCoproSettings = onSnapshot(coproRef(state.coproId), (snap) => {
+    if(!snap.exists()) return;
+    const data = snap.data();
+    state.autoHideResolvedDays = Number(data.autoHideResolvedDays) || 0;
+    const settingsInput = $("settingsAutoHideDays");
+    if(settingsInput && document.activeElement !== settingsInput){
+      settingsInput.value = state.autoHideResolvedDays || "";
+    }
+    const dLabel1 = $("oldResolvedDaysLabel"), dLabel2 = $("adminOldResolvedDaysLabel");
+    if(dLabel1) dLabel1.textContent = state.autoHideResolvedDays || "—";
+    if(dLabel2) dLabel2.textContent = state.autoHideResolvedDays || "—";
+    renderReportsList();
+    renderAdminReportsList();
+    updateOldResolvedToggleVisibility();
+  }, (err) => console.error("copro settings listener", err));
 }
 
 function listenTypes(){
@@ -1562,6 +1634,7 @@ function listenReports(){
     state.reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderReportsList();
     renderAdminReportsList();
+    updateOldResolvedToggleVisibility();
   }, (err) => console.error("reports listener", err));
 }
 
@@ -1605,55 +1678,12 @@ function renderTypeGrid(){
 }
 
 // =========================================================
-// MODALE: NOUVEAU SIGNALEMENT
-// =========================================================
-function openReportModal(type){
-  state.pendingType = type;
-  $("modalIcon").textContent = type.icon || "❗";
-  $("reportModalTitle").textContent = type.name;
-  const groupSel = $("groupSelect");
-  const groupLabel = groupSel.value === "all" || !groupSel.value
-    ? (state.groups[0]?.name || "Lieu non précisé")
-    : groupSel.options[groupSel.selectedIndex].textContent;
-  $("modalSub").textContent = `${state.coproName} · ${groupLabel}`;
-  $("reportComment").value = "";
-  state.pendingPhotos = [];
-  renderPhotoPreviews();
-  show($("reportModal"));
-  setTimeout(() => $("reportComment").focus(), 150);
-}
-
-// =========================================================
-// PHOTOS DU SIGNALEMENT (jusqu'à 3, redimensionnées côté client)
+// PHOTOS — composant réutilisable (jusqu'à 3 par étape :
+// signalement initial, changement de statut, modification).
+// Chaque "holder" est un objet { photos: [{blob, dataUrl}] }
+// mutable, indépendant d'un formulaire à l'autre.
 // =========================================================
 const MAX_REPORT_PHOTOS = 3;
-
-function renderPhotoPreviews(){
-  const wrap = $("photoPreviews");
-  const addBtn = $("btnAddPhoto");
-  if(!wrap) return;
-  wrap.innerHTML = "";
-  state.pendingPhotos.forEach((p, i) => {
-    const div = document.createElement("div");
-    div.className = "photo-thumb";
-    div.innerHTML = `
-      <img src="${p.dataUrl}" alt="Photo ${i + 1}">
-      <button type="button" class="photo-thumb-remove" aria-label="Retirer cette photo">✕</button>
-    `;
-    div.querySelector(".photo-thumb-remove").addEventListener("click", () => {
-      state.pendingPhotos.splice(i, 1);
-      renderPhotoPreviews();
-    });
-    wrap.appendChild(div);
-  });
-  if(addBtn){
-    addBtn.disabled = state.pendingPhotos.length >= MAX_REPORT_PHOTOS;
-    addBtn.querySelector("span:last-child").textContent =
-      state.pendingPhotos.length >= MAX_REPORT_PHOTOS
-        ? "Limite de 3 photos atteinte"
-        : "Ajouter une photo";
-  }
-}
 
 // Redimensionne et compresse une image côté client (évite des fichiers
 // trop lourds pour Firebase Storage / la connexion mobile de l'utilisateur).
@@ -1686,26 +1716,140 @@ function resizeImageFile(file, maxSize = 1280, quality = 0.75){
   });
 }
 
-async function onPhotoInputChange(e){
-  const file = e.target.files && e.target.files[0];
-  e.target.value = ""; // permet de resélectionner la même photo ensuite
-  if(!file) return;
-  if(state.pendingPhotos.length >= MAX_REPORT_PHOTOS){
-    toast("Vous pouvez ajouter 3 photos maximum.", "error");
-    return;
+// Construit un bloc <div class="field"> complet (label + previews +
+// bouton + input file) relié à `holder.photos`. `holder.photos` peut
+// être pré-rempli avec des photos existantes : { existingUrl } pour
+// une photo déjà en ligne (non re-uploadée), { blob, dataUrl } pour
+// une nouvelle photo locale en attente d'envoi.
+function createPhotoPickerField(holder, label = "Photos (facultatif, 3 max)"){
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  wrap.innerHTML = `
+    <span class="field-label">${escapeHtml(label)}</span>
+    <div class="photo-picker">
+      <div class="photo-previews"></div>
+      <button type="button" class="photo-add-btn">
+        <span class="photo-add-ic">📷</span>
+        <span>Ajouter une photo</span>
+      </button>
+      <input type="file" accept="image/*" capture="environment" hidden>
+    </div>
+  `;
+  const previewsEl = wrap.querySelector(".photo-previews");
+  const addBtn = wrap.querySelector(".photo-add-btn");
+  const fileInput = wrap.querySelector("input[type=file]");
+
+  function render(){
+    previewsEl.innerHTML = "";
+    holder.photos.forEach((p, i) => {
+      const div = document.createElement("div");
+      div.className = "photo-thumb";
+      div.innerHTML = `
+        <img src="${p.dataUrl || p.existingUrl}" alt="Photo ${i + 1}">
+        <button type="button" class="photo-thumb-remove" aria-label="Retirer cette photo">✕</button>
+      `;
+      div.querySelector(".photo-thumb-remove").addEventListener("click", () => {
+        holder.photos.splice(i, 1);
+        render();
+      });
+      previewsEl.appendChild(div);
+    });
+    addBtn.disabled = holder.photos.length >= MAX_REPORT_PHOTOS;
+    addBtn.querySelector("span:last-child").textContent =
+      holder.photos.length >= MAX_REPORT_PHOTOS
+        ? "Limite de 3 photos atteinte"
+        : "Ajouter une photo";
   }
-  if(!file.type.startsWith("image/")){
-    toast("Veuillez sélectionner une image.", "error");
-    return;
+
+  addBtn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ""; // permet de resélectionner la même photo ensuite
+    if(!file) return;
+    if(holder.photos.length >= MAX_REPORT_PHOTOS){
+      toast("Vous pouvez ajouter 3 photos maximum.", "error");
+      return;
+    }
+    if(!file.type.startsWith("image/")){
+      toast("Veuillez sélectionner une image.", "error");
+      return;
+    }
+    try{
+      const { blob, dataUrl } = await resizeImageFile(file);
+      holder.photos.push({ blob, dataUrl });
+      render();
+    }catch(err){
+      console.error(err);
+      toast("Impossible de charger cette photo.", "error");
+    }
+  });
+
+  render();
+  return wrap;
+}
+
+// Téléverse les nouvelles photos (celles avec un `blob`) vers Firebase
+// Storage sous le chemin donné, et renvoie le tableau final d'URLs en
+// conservant les URLs déjà existantes (`existingUrl`) dans leur ordre.
+async function uploadPendingPhotos(photos, pathPrefix){
+  const urls = [];
+  for(let i = 0; i < photos.length; i++){
+    const p = photos[i];
+    if(p.existingUrl){
+      urls.push(p.existingUrl);
+      continue;
+    }
+    const path = `${pathPrefix}/photo_${i}_${Date.now()}.jpg`;
+    const sRef = storageRef(storage, path);
+    await uploadBytes(sRef, p.blob, { contentType: "image/jpeg" });
+    const url = await getDownloadURL(sRef);
+    urls.push(url);
   }
-  try{
-    const { blob, dataUrl } = await resizeImageFile(file);
-    state.pendingPhotos.push({ blob, dataUrl });
-    renderPhotoPreviews();
-  }catch(err){
-    console.error(err);
-    toast("Impossible de charger cette photo.", "error");
-  }
+  return urls;
+}
+
+// Petite galerie de miniatures cliquables (lightbox), utilisée dans le
+// détail du signalement et dans chaque entrée de l'historique.
+function photoGalleryHtml(photos, extraClass = ""){
+  if(!photos || !photos.length) return "";
+  return `<div class="detail-photos ${extraClass}">${photos.map((u, i) =>
+    `<button type="button" class="detail-photo-thumb" data-url="${u}"><img src="${u}" alt="Photo ${i + 1}"></button>`
+  ).join("")}</div>`;
+}
+
+function bindPhotoGalleryClicks(container){
+  container.querySelectorAll(".detail-photo-thumb").forEach(btn => {
+    btn.addEventListener("click", () => openLightbox(btn.dataset.url));
+  });
+}
+
+// =========================================================
+// MODALE: NOUVEAU SIGNALEMENT
+// =========================================================
+function openReportModal(type){
+  state.pendingType = type;
+  $("modalIcon").textContent = type.icon || "❗";
+  $("reportModalTitle").textContent = type.name;
+  const groupSel = $("groupSelect");
+  const groupLabel = groupSel.value === "all" || !groupSel.value
+    ? (state.groups[0]?.name || "Lieu non précisé")
+    : groupSel.options[groupSel.selectedIndex].textContent;
+  $("modalSub").textContent = `${state.coproName} · ${groupLabel}`;
+  $("reportComment").value = "";
+
+  state.pendingPhotos = [];
+  const photoHolder = { photos: state.pendingPhotos };
+  const existingField = $("reportPhotoField");
+  if(existingField) existingField.remove();
+  const field = createPhotoPickerField(photoHolder);
+  field.id = "reportPhotoField";
+  $("reportComment").closest("label").after(field);
+  // garde state.pendingPhotos synchronisé avec le tableau réellement utilisé par le composant
+  state.pendingPhotos = photoHolder.photos;
+  state._reportPhotoHolder = photoHolder;
+
+  show($("reportModal"));
+  setTimeout(() => $("reportComment").focus(), 150);
 }
 
 async function onReportSubmit(e){
@@ -1724,7 +1868,7 @@ async function onReportSubmit(e){
   }
 
   const comment = $("reportComment").value.trim();
-  const photosToUpload = state.pendingPhotos.slice();
+  const photosToUpload = (state._reportPhotoHolder?.photos || []).slice();
 
   setBtnLoading(btn, true);
   try{
@@ -1744,14 +1888,7 @@ async function onReportSubmit(e){
 
     if(photosToUpload.length > 0){
       try{
-        const urls = [];
-        for(let i = 0; i < photosToUpload.length; i++){
-          const path = `coprovigie/${state.coproId}/reports/${reportRef.id}/photo_${i}_${Date.now()}.jpg`;
-          const sRef = storageRef(storage, path);
-          await uploadBytes(sRef, photosToUpload[i].blob, { contentType: "image/jpeg" });
-          const url = await getDownloadURL(sRef);
-          urls.push(url);
-        }
+        const urls = await uploadPendingPhotos(photosToUpload, `coprovigie/${state.coproId}/reports/${reportRef.id}`);
         await updateDoc(reportRef, { photos: urls });
       }catch(uploadErr){
         console.error(uploadErr);
@@ -1773,11 +1910,35 @@ async function onReportSubmit(e){
 // =========================================================
 // RENDER: LISTE DES SIGNALEMENTS (vue résident)
 // =========================================================
+// Un signalement résolu est considéré "ancien" s'il est résolu depuis
+// plus de `autoHideResolvedDays` jours (calculé sur sa dernière mise à
+// jour). Ce délai est configurable par l'admin ; 0 = fonctionnalité désactivée.
+function isOldResolved(r){
+  if(!state.autoHideResolvedDays || state.autoHideResolvedDays <= 0) return false;
+  if(r.status !== "resolved") return false;
+  const ref = r.updatedAt?.toDate ? r.updatedAt.toDate() : (r.createdAt?.toDate ? r.createdAt.toDate() : null);
+  if(!ref) return false;
+  const ageDays = (Date.now() - ref.getTime()) / 86400000;
+  return ageDays > state.autoHideResolvedDays;
+}
+
 function filteredReports(filter, groupFilter){
   return state.reports.filter(r => {
     if(filter !== "all" && r.status !== filter) return false;
     if(groupFilter && groupFilter !== "all" && r.groupId !== groupFilter) return false;
+    if(!state.showOldResolved && isOldResolved(r)) return false;
     return true;
+  });
+}
+
+// Affiche/masque la case "afficher les anciens résolus" selon que la
+// fonctionnalité est activée par l'admin et qu'il existe réellement des
+// signalements masqués à révéler.
+function updateOldResolvedToggleVisibility(){
+  const hasHidden = state.reports.some(r => isOldResolved(r));
+  [$("oldResolvedToggleWrap"), $("adminOldResolvedToggleWrap")].forEach(el => {
+    if(!el) return;
+    if(hasHidden) show(el); else hide(el);
   });
 }
 
@@ -1795,8 +1956,11 @@ function renderReportsList(){
 }
 
 function reportCardEl(r, isAdminView){
+  const group = state.groups.find(g => g.id === r.groupId);
+  const groupColor = group?.color || null;
   const card = document.createElement("button");
   card.className = "report-card";
+  if(groupColor) card.style.setProperty("--group-color", groupColor);
   card.innerHTML = `
     <div class="report-ic">${escapeHtml(r.typeIcon || "❗")}</div>
     <div class="report-body">
@@ -1804,7 +1968,7 @@ function reportCardEl(r, isAdminView){
         <span class="report-title">${escapeHtml(r.typeName)}</span>
         <span class="status-badge status-${r.status}">${STATUS_LABELS[r.status] || r.status}</span>
       </div>
-      <div class="report-meta">${escapeHtml(r.groupName || "")} · ${formatDate(r.createdAt)}</div>
+      <div class="report-meta">${groupColor ? `<span class="group-dot" style="background:${groupColor}"></span>` : ""}${escapeHtml(r.groupName || "")} · ${formatDate(r.createdAt)}</div>
       ${r.comment ? `<div class="report-comment">${escapeHtml(r.comment)}</div>` : ""}
       ${r.photos && r.photos.length ? `<div class="report-photo-strip">${r.photos.slice(0,3).map(u => `<img src="${u}" alt="Photo du signalement">`).join("")}</div>` : ""}
       <div class="report-author">Signalé par ${escapeHtml(r.author || "anonyme")}</div>
@@ -1859,14 +2023,14 @@ function openDetailModal(r, isAdminView){
   content.innerHTML = `
     <div class="modal-icon">${escapeHtml(r.typeIcon || "❗")}</div>
     <h3>${escapeHtml(r.typeName)}</h3>
-    <p class="modal-sub">${escapeHtml(r.groupName || "")} · ${formatDate(r.createdAt)}</p>
+    <p class="modal-sub">${(state.groups.find(g=>g.id===r.groupId)?.color) ? `<span class="group-dot" style="background:${state.groups.find(g=>g.id===r.groupId).color}"></span>` : ""}${escapeHtml(r.groupName || "")} · ${formatDate(r.createdAt)}</p>
     <div class="detail-status-row">${statusButtons}</div>
     <div class="detail-meta-block">
       <div><strong>Signalé par :</strong> ${escapeHtml(r.author || "anonyme")}</div>
       <div><strong>Date :</strong> ${formatDate(r.createdAt)}</div>
     </div>
     ${r.comment ? `<div class="detail-comment-box">${escapeHtml(r.comment)}</div>` : `<p class="settings-help">Aucun commentaire.</p>`}
-    ${r.photos && r.photos.length ? `<div class="detail-photos">${r.photos.map((u,i) => `<button type="button" class="detail-photo-thumb" data-url="${u}"><img src="${u}" alt="Photo ${i+1} du signalement"></button>`).join("")}</div>` : ""}
+    ${photoGalleryHtml(r.photos)}
 
     <div class="dash-divider" style="margin-top:24px;"><span>Historique</span></div>
     <div id="historyList" class="history-list">
@@ -1882,9 +2046,7 @@ function openDetailModal(r, isAdminView){
   `;
 
   // --- Photos : ouverture en grand (lightbox) ---
-  content.querySelectorAll(".detail-photo-thumb").forEach(btn => {
-    btn.addEventListener("click", () => openLightbox(btn.dataset.url));
-  });
+  bindPhotoGalleryClicks(content);
 
   // --- Changement de statut : ouvert à tout résident connecté ---
   content.querySelectorAll(".detail-status-btn").forEach(btn => {
@@ -1945,9 +2107,11 @@ async function loadReportHistory(reportId){
           </div>
           <div class="history-author">par ${escapeHtml(h.author || "anonyme")}</div>
           ${h.comment ? `<div class="history-comment">${escapeHtml(h.comment)}</div>` : ""}
+          ${photoGalleryHtml(h.photos, "history-photos")}
         </div>
       `;
     }).join("");
+    bindPhotoGalleryClicks(freshList);
   }catch(e){
     console.error(e);
     const freshList = $("historyList");
@@ -1979,26 +2143,40 @@ function openStatusChangeModal(r, newStatus){
     </form>
   `;
 
+  const statusPhotoHolder = { photos: [] };
+  $("statusComment").closest("label").after(createPhotoPickerField(statusPhotoHolder));
+
   $("btnCancelStatus").addEventListener("click", () => openDetailModal(r, state.isAdmin));
 
   $("formStatusChange").addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector("button[type=submit]");
     const comment = $("statusComment").value.trim();
+    const photosToUpload = statusPhotoHolder.photos.slice();
     setBtnLoading(btn, true);
     try{
       await updateDoc(doc(db, "coprovigie", state.coproId, "reports", r.id), {
         status: newStatus,
         updatedAt: serverTimestamp(),
       });
-      await addDoc(historyCol(state.coproId, r.id), {
+      const historyRef = await addDoc(historyCol(state.coproId, r.id), {
         fromStatus: r.status,
         toStatus: newStatus,
         author: state.pseudo,
         authorId: state.memberId || null,
         comment: comment || "",
+        photos: [],
         createdAt: serverTimestamp(),
       });
+      if(photosToUpload.length > 0){
+        try{
+          const urls = await uploadPendingPhotos(photosToUpload, `coprovigie/${state.coproId}/reports/${r.id}/history/${historyRef.id}`);
+          await updateDoc(historyRef, { photos: urls });
+        }catch(uploadErr){
+          console.error(uploadErr);
+          toast("Statut mis à jour, mais l'envoi des photos a échoué.", "error");
+        }
+      }
       toast("Statut mis à jour", "success");
       hide($("detailModal"));
     }catch(err){
@@ -2033,16 +2211,22 @@ function openEditReportModal(r){
     </form>
   `;
 
+  const editPhotoHolder = { photos: (r.photos || []).map(u => ({ existingUrl: u })) };
+  $("editComment").closest("label").after(createPhotoPickerField(editPhotoHolder));
+
   $("btnCancelEdit").addEventListener("click", () => openDetailModal(r, state.isAdmin));
 
   $("formEditReport").addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector("button[type=submit]");
     const comment = $("editComment").value.trim();
+    const photosToSave = editPhotoHolder.photos.slice();
     setBtnLoading(btn, true);
     try{
+      const urls = await uploadPendingPhotos(photosToSave, `coprovigie/${state.coproId}/reports/${r.id}`);
       await updateDoc(doc(db, "coprovigie", state.coproId, "reports", r.id), {
         comment: comment,
+        photos: urls,
         updatedAt: serverTimestamp(),
       });
       toast("Signalement modifié", "success");
@@ -2073,6 +2257,7 @@ function renderAdminReportsList(){
 function populateAdminScreen(){
   $("settingsName").value = state.coproName || "";
   $("settingsCode").value = state.coproCode || "";
+  $("settingsAutoHideDays").value = state.autoHideResolvedDays || "";
   renderAdminReportsList();
   renderGroupsAdminList();
   renderTypesAdminList();
@@ -2091,13 +2276,22 @@ function renderGroupsAdminList(){
     return;
   }
   state.groups.forEach(g => {
+    const color = g.color || pickGroupColor();
     const li = document.createElement("li");
     li.className = "manage-item";
     li.innerHTML = `
-      <span class="mi-ic">📍</span>
+      <input type="color" class="mi-color" value="${color}" title="Couleur d'identification de ce lieu" aria-label="Couleur de ${escapeHtml(g.name)}">
       <span class="mi-name">${escapeHtml(g.name)}</span>
       <button class="mi-del" data-id="${g.id}">Supprimer</button>
     `;
+    li.querySelector(".mi-color").addEventListener("change", async (e) => {
+      try{
+        await updateDoc(doc(db, "coprovigie", state.coproId, "groups", g.id), { color: e.target.value });
+      }catch(err){
+        console.error(err);
+        toast("Erreur lors de la mise à jour de la couleur", "error");
+      }
+    });
     li.querySelector(".mi-del").addEventListener("click", async () => {
       if(!confirm(`Supprimer "${g.name}" ? Les signalements existants conserveront ce nom.`)) return;
       try{
@@ -2115,7 +2309,7 @@ async function onAddGroup(e){
   const name = input.value.trim();
   if(!name) return;
   try{
-    await addDoc(groupsCol(state.coproId), { name, createdAt: serverTimestamp() });
+    await addDoc(groupsCol(state.coproId), { name, color: pickGroupColor(), createdAt: serverTimestamp() });
     input.value = "";
     toast("Lieu ajouté", "success");
   }catch(err){
@@ -2341,6 +2535,19 @@ async function onSettingsCode(e){
     state.coproCode = code;
     saveSession();
     toast("Code d'accès mis à jour. Les sessions déjà ouvertes ne sont pas affectées.", "success");
+  }catch(err){
+    console.error(err);
+    toast("Erreur", "error");
+  }
+}
+
+async function onSettingsAutoHide(e){
+  e.preventDefault();
+  const raw = $("settingsAutoHideDays").value;
+  const days = raw === "" ? 0 : Math.max(0, parseInt(raw, 10) || 0);
+  try{
+    await updateDoc(coproRef(state.coproId), { autoHideResolvedDays: days });
+    toast(days > 0 ? `Les résolus de plus de ${days} jour(s) seront masqués par défaut.` : "Masquage automatique désactivé.", "success");
   }catch(err){
     console.error(err);
     toast("Erreur", "error");
