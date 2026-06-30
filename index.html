@@ -984,9 +984,6 @@ import {
   updateDoc, deleteDoc, query, where, orderBy, onSnapshot,
   serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
-import {
-  getStorage, ref as storageRef, uploadBytes, getDownloadURL
-} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-storage.js";
 
 // --- Config Firebase ---
 const firebaseConfig = {
@@ -1004,12 +1001,11 @@ const firebaseConfig = {
 // ---------------------------------------------------------
 // INIT FIREBASE
 // ---------------------------------------------------------
-let app, db, storage;
+let app, db;
 let firebaseReady = false;
 try{
   app = initializeApp(firebaseConfig);
   db = getFirestore(app);
-  storage = getStorage(app);
   firebaseReady = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "VOTRE_API_KEY";
 }catch(e){
   console.error("Firebase init error", e);
@@ -1693,10 +1689,13 @@ function renderTypeGrid(){
 const MAX_REPORT_PHOTOS = 3;
 
 // Redimensionne et compresse une image côté client.
-// Cible : largeur max 800 px, qualité JPEG 0.65, taille finale ≤ 200 Ko.
-// Si la première compression dépasse 200 Ko, une seconde passe abaisse
-// la qualité progressivement jusqu'à rentrer dans la limite.
-function resizeImageFile(file, maxSize = 800, quality = 0.65){
+// Cible : 640 px max, qualité JPEG 0.60, taille finale ≤ 80 Ko.
+// Les photos sont stockées en base64 directement dans Firestore
+// (pas de Firebase Storage requis). Avec 3 photos à 80 Ko chacune,
+// le document reste bien en dessous de la limite Firestore de 1 Mo.
+// Si le premier encodage dépasse 80 Ko, des passes successives réduisent
+// la qualité de 0.1 jusqu'à un plancher de 0.2.
+function resizeImageFile(file, maxSize = 640, quality = 0.60){
   return new Promise((resolve, reject) => {
     const img = new Image();
     const reader = new FileReader();
@@ -1711,17 +1710,15 @@ function resizeImageFile(file, maxSize = 800, quality = 0.65){
         canvas.width = width; canvas.height = height;
         canvas.getContext("2d").drawImage(img, 0, 0, width, height);
 
-        // Première tentative avec la qualité cible
+        const MAX_BYTES = 80 * 1024; // 80 Ko
+
         function tryEncode(q){
           canvas.toBlob((blob) => {
             if(!blob){ reject(new Error("Conversion image impossible")); return; }
-            const MAX_BYTES = 200 * 1024; // 200 Ko
-            if(blob.size <= MAX_BYTES || q <= 0.3){
-              // Dans la limite ou qualité minimale atteinte → on accepte
+            if(blob.size <= MAX_BYTES || q <= 0.2){
               const dataUrl = canvas.toDataURL("image/jpeg", q);
               resolve({ blob, dataUrl });
             } else {
-              // Trop lourd → nouvelle passe avec qualité réduite de 0.1
               tryEncode(Math.round((q - 0.1) * 10) / 10);
             }
           }, "image/jpeg", q);
@@ -1808,24 +1805,20 @@ function createPhotoPickerField(holder, label = "Photos (facultatif, 3 max)"){
   return wrap;
 }
 
-// Téléverse les nouvelles photos (celles avec un `blob`) vers Firebase
-// Storage sous le chemin donné, et renvoie le tableau final d'URLs en
-// conservant les URLs déjà existantes (`existingUrl`) dans leur ordre.
-async function uploadPendingPhotos(photos, pathPrefix){
-  const urls = [];
-  for(let i = 0; i < photos.length; i++){
-    const p = photos[i];
+// Résout le tableau de photos en un tableau de chaînes base64 (data-URL).
+// Les photos déjà existantes (existingUrl = déjà une data-URL ou une URL
+// externe conservée) sont retournées telles quelles.
+// Aucun upload réseau — tout reste dans Firestore.
+async function resolvePendingPhotos(photos){
+  const result = [];
+  for(const p of photos){
     if(p.existingUrl){
-      urls.push(p.existingUrl);
-      continue;
+      result.push(p.existingUrl);
+    } else if(p.dataUrl){
+      result.push(p.dataUrl);
     }
-    const path = `${pathPrefix}/photo_${i}_${Date.now()}.jpg`;
-    const sRef = storageRef(storage, path);
-    await uploadBytes(sRef, p.blob, { contentType: "image/jpeg" });
-    const url = await getDownloadURL(sRef);
-    urls.push(url);
   }
-  return urls;
+  return result;
 }
 
 // Petite galerie de miniatures cliquables (lightbox), utilisée dans le
@@ -1892,29 +1885,21 @@ async function onReportSubmit(e){
 
   setBtnLoading(btn, true);
   try{
+    const photoUrls = photosToUpload.length > 0 ? await resolvePendingPhotos(photosToUpload) : [];
+
     const reportRef = await addDoc(reportsCol(state.coproId), {
       typeName: state.pendingType.name,
       typeIcon: state.pendingType.icon || "❗",
       groupId: groupId,
       groupName: groupName,
       comment: comment || "",
-      photos: [],
+      photos: photoUrls,
       author: state.pseudo,
       authorId: state.memberId || null,
       status: "reported",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-
-    if(photosToUpload.length > 0){
-      try{
-        const urls = await uploadPendingPhotos(photosToUpload, `coprovigie/${state.coproId}/reports/${reportRef.id}`);
-        await updateDoc(reportRef, { photos: urls });
-      }catch(uploadErr){
-        console.error(uploadErr);
-        toast("Signalement envoyé, mais l'envoi des photos a échoué.", "error");
-      }
-    }
 
     state.pendingPhotos = [];
     hide($("reportModal"));
@@ -2175,28 +2160,20 @@ function openStatusChangeModal(r, newStatus){
     const photosToUpload = statusPhotoHolder.photos.slice();
     setBtnLoading(btn, true);
     try{
+      const photoUrls = photosToUpload.length > 0 ? await resolvePendingPhotos(photosToUpload) : [];
       await updateDoc(doc(db, "coprovigie", state.coproId, "reports", r.id), {
         status: newStatus,
         updatedAt: serverTimestamp(),
       });
-      const historyRef = await addDoc(historyCol(state.coproId, r.id), {
+      await addDoc(historyCol(state.coproId, r.id), {
         fromStatus: r.status,
         toStatus: newStatus,
         author: state.pseudo,
         authorId: state.memberId || null,
         comment: comment || "",
-        photos: [],
+        photos: photoUrls,
         createdAt: serverTimestamp(),
       });
-      if(photosToUpload.length > 0){
-        try{
-          const urls = await uploadPendingPhotos(photosToUpload, `coprovigie/${state.coproId}/reports/${r.id}/history/${historyRef.id}`);
-          await updateDoc(historyRef, { photos: urls });
-        }catch(uploadErr){
-          console.error(uploadErr);
-          toast("Statut mis à jour, mais l'envoi des photos a échoué.", "error");
-        }
-      }
       toast("Statut mis à jour", "success");
       hide($("detailModal"));
     }catch(err){
@@ -2243,7 +2220,7 @@ function openEditReportModal(r){
     const photosToSave = editPhotoHolder.photos.slice();
     setBtnLoading(btn, true);
     try{
-      const urls = await uploadPendingPhotos(photosToSave, `coprovigie/${state.coproId}/reports/${r.id}`);
+      const urls = await resolvePendingPhotos(photosToSave);
       await updateDoc(doc(db, "coprovigie", state.coproId, "reports", r.id), {
         comment: comment,
         photos: urls,
