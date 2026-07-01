@@ -691,55 +691,105 @@ h1,h2,h3{ margin:0; }
   </section>
 
   <!-- =====================================================
-       ECRAN 1 — REJOINDRE (résident)
+       ECRAN 1 — CHOIX : SE CONNECTER OU S'INSCRIRE
   ====================================================== -->
   <section id="screenJoin" class="screen screen-center" hidden>
     <button class="btn-back" data-back="screenWelcome">← Retour</button>
-    <p class="eyebrow">Rejoindre</p>
-    <h2 class="screen-title">Entrez dans l'immeuble</h2>
-    <p class="screen-sub">Le code d'accès vous a été communiqué par votre syndic ou conseil syndical.</p>
+    <p class="eyebrow">Résident</p>
+    <h2 class="screen-title">Bienvenue</h2>
+    <p class="screen-sub">Vous avez déjà un compte sur cette copropriété ou c'est votre première fois ?</p>
+    <div class="welcome-actions">
+      <button id="btnGoLogin" class="btn-primary btn-large btn-full">Me connecter</button>
+      <button id="btnGoRegister" class="btn-outline btn-large btn-full">Créer mon compte</button>
+    </div>
+    <div class="divider-or"><span>ou</span></div>
+    <button id="btnMagicLink" class="btn-outline btn-large btn-full">📧 Lien de connexion par e-mail</button>
+  </section>
 
-    <form id="formJoin" class="stack-form">
+  <!-- =====================================================
+       ECRAN 1a — CONNEXION RÉSIDENT (compte existant)
+  ====================================================== -->
+  <section id="screenLogin" class="screen screen-center" hidden>
+    <button class="btn-back" data-back="screenJoin">← Retour</button>
+    <p class="eyebrow">Connexion</p>
+    <h2 class="screen-title">Content de vous revoir</h2>
+    <p class="screen-sub">Entrez le code de votre copropriété, votre pseudo et votre code personnel.</p>
+    <form id="formLogin" class="stack-form">
       <label class="field">
         <span class="field-label">Code d'accès de la copropriété</span>
         <div class="input-wrap">
-          <input id="joinCode" type="text" inputmode="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
-          <button type="button" class="btn-eye" data-target="joinCode" aria-label="Afficher/masquer">👁</button>
+          <input id="loginCode" type="text" inputmode="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
+          <button type="button" class="btn-eye" data-target="loginCode" aria-label="Afficher/masquer">👁</button>
         </div>
       </label>
       <label class="field">
         <span class="field-label">Votre pseudo</span>
-        <input id="joinPseudo" type="text" autocomplete="off" placeholder="Ex. Marie, Appt 14" required class="input" maxlength="30">
+        <input id="loginPseudo" type="text" autocomplete="username" placeholder="Ex. Marie, Appt 14" required class="input" maxlength="30">
       </label>
       <label class="field">
         <span class="field-label">Code personnel</span>
         <div class="input-wrap">
-          <input id="joinPersonalCode" type="text" inputmode="text" autocomplete="off" placeholder="4 caractères min." required class="input input-code" maxlength="20" minlength="4">
-          <button type="button" class="btn-eye" data-target="joinPersonalCode" aria-label="Afficher/masquer">👁</button>
+          <input id="loginPersonalCode" type="text" inputmode="text" autocomplete="current-password" placeholder="Votre code habituel" required class="input input-code" maxlength="20" minlength="4">
+          <button type="button" class="btn-eye" data-target="loginPersonalCode" aria-label="Afficher/masquer">👁</button>
         </div>
-        <span class="field-hint">À inventer librement la première fois (sert à vous reconnecter ensuite, même depuis un autre appareil).</span>
       </label>
-      <label class="field">
-        <span class="field-label">Adresse e-mail <span class="field-optional">— optionnel</span></span>
-        <input id="joinEmail" type="email" autocomplete="email" placeholder="pour retrouver vos accès" class="input" maxlength="120">
-        <span class="field-hint">Recommandé : si vous changez d'appareil ou oubliez votre code, un lien de reconnexion vous sera envoyé par e-mail. Votre adresse n'est pas partagée.</span>
-      </label>
-      <p id="joinError" class="form-error" hidden></p>
+      <p id="loginError" class="form-error" hidden></p>
       <button type="submit" class="btn-primary btn-large btn-full">
-        <span>Entrer</span>
+        <span>Se connecter</span>
         <span class="btn-spinner" hidden></span>
       </button>
     </form>
-    <div class="divider-or"><span>ou</span></div>
-    <button id="btnMagicLink" class="btn-outline btn-large btn-full">📧 Me connecter avec un lien e-mail</button>
-    <button id="btnForgotCode" class="link-muted">Code personnel oublié ? Demandez à votre administrateur de le réinitialiser.</button>
+    <button id="btnForgotCode" class="link-muted">Code personnel oublié ?</button>
+  </section>
+
+  <!-- =====================================================
+       ECRAN 1b — INSCRIPTION RÉSIDENT (nouveau compte)
+  ====================================================== -->
+  <section id="screenRegister" class="screen screen-center" hidden>
+    <button class="btn-back" data-back="screenJoin">← Retour</button>
+    <p class="eyebrow">Inscription</p>
+    <h2 class="screen-title">Créer mon compte</h2>
+    <p class="screen-sub">Le code d'accès vous a été communiqué par votre syndic ou conseil syndical.</p>
+    <form id="formRegister" class="stack-form">
+      <label class="field">
+        <span class="field-label">Code d'accès de la copropriété</span>
+        <div class="input-wrap">
+          <input id="registerCode" type="text" inputmode="text" autocomplete="off" placeholder="Ex. LILAS-12" required class="input input-code" maxlength="40">
+          <button type="button" class="btn-eye" data-target="registerCode" aria-label="Afficher/masquer">👁</button>
+        </div>
+      </label>
+      <label class="field">
+        <span class="field-label">Choisissez un pseudo</span>
+        <input id="registerPseudo" type="text" autocomplete="username" placeholder="Ex. Marie, Appt 14" required class="input" maxlength="30">
+        <span class="field-hint">Ce nom sera visible de tous les résidents. Choisissez quelque chose de reconnaissable.</span>
+      </label>
+      <label class="field">
+        <span class="field-label">Choisissez un code personnel</span>
+        <div class="input-wrap">
+          <input id="registerPersonalCode" type="text" inputmode="text" autocomplete="new-password" placeholder="4 caractères min." required class="input input-code" maxlength="20" minlength="4">
+          <button type="button" class="btn-eye" data-target="registerPersonalCode" aria-label="Afficher/masquer">👁</button>
+        </div>
+        <span class="field-hint">Notez-le : il vous servira à vous reconnecter depuis un autre appareil.</span>
+      </label>
+      <label class="field">
+        <span class="field-label">Adresse e-mail <span class="field-optional">— optionnel</span></span>
+        <input id="registerEmail" type="email" autocomplete="email" placeholder="votre@email.fr" class="input" maxlength="120">
+        <span class="field-hint">Recommandé : permet de recevoir un lien de reconnexion si vous oubliez votre code. Non partagée.</span>
+      </label>
+      <p id="registerError" class="form-error" hidden></p>
+      <button type="submit" class="btn-primary btn-large btn-full">
+        <span>Créer mon compte</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+    </form>
+    <p class="link-muted" style="text-align:center;">Déjà un compte ? <button id="btnGoLoginFromRegister" class="link-muted" style="display:inline;text-decoration:underline;">Se connecter</button></p>
   </section>
 
   <!-- =====================================================
        ECRAN 1b — CODE PERSONNEL OUBLIÉ (info)
   ====================================================== -->
   <section id="screenForgotCode" class="screen screen-center" hidden>
-    <button class="btn-back" data-back="screenJoin">← Retour</button>
+    <button class="btn-back" data-back="screenLogin">← Retour</button>
     <p class="eyebrow">Code oublié</p>
     <h2 class="screen-title">Demandez une réinitialisation</h2>
     <p class="screen-sub">Contactez l'administrateur de votre copropriété (syndic, conseil syndical…) en lui indiquant votre pseudo. Il pourra réinitialiser votre code personnel depuis son espace d'administration, onglet « Résidents ». Vous pourrez alors en choisir un nouveau à la prochaine connexion.</p>
@@ -1282,6 +1332,9 @@ function bindStaticEvents(){
   $("btnGoJoin").addEventListener("click", () => showScreen("screenJoin"));
   $("btnGoCreate").addEventListener("click", () => showScreen("screenCreate"));
   $("btnGoAdminLogin").addEventListener("click", () => showScreen("screenAdminLogin"));
+  $("btnGoLogin").addEventListener("click", () => showScreen("screenLogin"));
+  $("btnGoRegister").addEventListener("click", () => showScreen("screenRegister"));
+  $("btnGoLoginFromRegister").addEventListener("click", () => showScreen("screenLogin"));
   $("btnForgotCode").addEventListener("click", () => showScreen("screenForgotCode"));
   $("btnMagicLink").addEventListener("click", () => showScreen("screenMagicLink"));
 
@@ -1311,7 +1364,8 @@ function bindStaticEvents(){
   });
 
   // Forms
-  $("formJoin").addEventListener("submit", onJoinSubmit);
+  $("formLogin").addEventListener("submit", onLoginSubmit);
+  $("formRegister").addEventListener("submit", onRegisterSubmit);
   $("formCreate").addEventListener("submit", onCreateSubmit);
   $("formAdminLogin").addEventListener("submit", onAdminLoginSubmit);
   $("formMagicLink").addEventListener("submit", onMagicLinkSubmit);
@@ -1558,92 +1612,132 @@ async function handleMagicLinkReturn(){
   }
 }
 
-async function onJoinSubmit(e){
+// =========================================================
+// CONNEXION RÉSIDENT (compte existant)
+// =========================================================
+async function onLoginSubmit(e){
   e.preventDefault();
   const btn = e.target.querySelector("button[type=submit]");
-  const errEl = $("joinError");
+  const errEl = $("loginError");
   hide(errEl);
 
-  const code = normalizeCode($("joinCode").value);
-  const pseudo = $("joinPseudo").value.trim();
-  const personalCode = $("joinPersonalCode").value.trim();
+  const code = normalizeCode($("loginCode").value);
+  const pseudo = $("loginPseudo").value.trim();
+  const personalCode = $("loginPersonalCode").value.trim();
   if(!code || !pseudo || personalCode.length < 4){
-    errEl.textContent = "Merci de renseigner le code d'accès, votre pseudo et un code personnel (4 caractères min.).";
-    show(errEl);
-    return;
+    errEl.textContent = "Merci de renseigner tous les champs.";
+    show(errEl); return;
   }
-
   setBtnLoading(btn, true);
   try{
     const q = query(collection(db, "coprovigie"), where("code", "==", code));
     const snap = await getDocs(q);
     if(snap.empty){
       errEl.textContent = "Code d'accès introuvable. Vérifiez auprès de votre syndic.";
-      show(errEl);
-      setBtnLoading(btn, false);
-      return;
+      show(errEl); return;
     }
     const docSnap = snap.docs[0];
-    const data = docSnap.data();
     const coproId = docSnap.id;
+    const data = docSnap.data();
     const pseudoKey = normalizePseudo(pseudo);
 
-    // Vérifie si ce pseudo existe déjà pour cette copropriété
     const mQ = query(membersCol(coproId), where("pseudoKey", "==", pseudoKey));
     const mSnap = await getDocs(mQ);
+    if(mSnap.empty){
+      errEl.textContent = "Pseudo introuvable dans cette copropriété. Vérifiez l'orthographe ou créez un compte.";
+      show(errEl); return;
+    }
+    const memberDoc = mSnap.docs[0];
+    const memberData = memberDoc.data();
 
-    let memberId;
-    if(!mSnap.empty){
-      // Pseudo déjà utilisé : on vérifie le code personnel pour confirmer
-      // que c'est bien le même résident (reconnexion, nouvel appareil, etc.)
-      const existingMember = mSnap.docs[0];
-      const memberData = existingMember.data();
-
-      if(memberData.personalCodeReset === true){
-        // Le code venait d'être réinitialisé par l'admin : on accepte le
-        // nouveau code tapé par le résident et on l'enregistre comme son
-        // nouveau code personnel.
-        await updateDoc(doc(membersCol(coproId), existingMember.id), {
-          personalCode: personalCode,
-          personalCodeReset: false,
-        });
-        memberId = existingMember.id;
-      }else if(memberData.personalCode === personalCode){
-        memberId = existingMember.id;
-      }else{
-        errEl.textContent = `Le pseudo "${pseudo}" est déjà utilisé. Si c'est vous, entrez votre code personnel habituel. Sinon, choisissez un autre pseudo.`;
-        show(errEl);
-        setBtnLoading(btn, false);
-        return;
-      }
-    }else{
-      // Nouveau résident : on crée son identifiant unique + son code personnel
-      memberId = generateMemberId();
-      await setDoc(doc(membersCol(coproId), memberId), {
-        pseudo: pseudo,
-        pseudoKey: pseudoKey,
+    if(memberData.personalCodeReset === true){
+      // Réinitialisation demandée par l'admin : on accepte le nouveau code
+      await updateDoc(doc(membersCol(coproId), memberDoc.id), {
         personalCode: personalCode,
         personalCodeReset: false,
-        createdAt: serverTimestamp(),
       });
+    } else if(memberData.personalCode !== personalCode){
+      errEl.textContent = "Code personnel incorrect.";
+      show(errEl); return;
     }
 
     state.coproId = coproId;
     state.coproName = data.name;
     state.coproCode = data.code;
-    state.pseudo = pseudo;
-    state.email = $("joinEmail").value.trim().toLowerCase() || null;
-    state.memberId = memberId;
+    state.pseudo = memberData.pseudo;
+    state.email = memberData.email || null;
+    state.memberId = memberDoc.id;
     state.isAdmin = false;
+    saveSession();
+    toast(`Bienvenue, ${state.pseudo} !`, "success");
+    enterCoproSpace();
+  }catch(err){
+    console.error(err);
+    errEl.textContent = "Une erreur est survenue. Réessayez.";
+    show(errEl);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
 
-    // Si un email est fourni, on le sauvegarde dans le profil membre
-    if(state.email){
-      await updateDoc(doc(membersCol(coproId), memberId), { email: state.email }).catch(() => {});
+// =========================================================
+// INSCRIPTION RÉSIDENT (nouveau compte)
+// =========================================================
+async function onRegisterSubmit(e){
+  e.preventDefault();
+  const btn = e.target.querySelector("button[type=submit]");
+  const errEl = $("registerError");
+  hide(errEl);
+
+  const code = normalizeCode($("registerCode").value);
+  const pseudo = $("registerPseudo").value.trim();
+  const personalCode = $("registerPersonalCode").value.trim();
+  const email = $("registerEmail").value.trim().toLowerCase() || null;
+  if(!code || !pseudo || personalCode.length < 4){
+    errEl.textContent = "Merci de renseigner le code d'accès, un pseudo et un code personnel (4 caractères min.).";
+    show(errEl); return;
+  }
+  setBtnLoading(btn, true);
+  try{
+    const q = query(collection(db, "coprovigie"), where("code", "==", code));
+    const snap = await getDocs(q);
+    if(snap.empty){
+      errEl.textContent = "Code d'accès introuvable. Vérifiez auprès de votre syndic.";
+      show(errEl); return;
+    }
+    const docSnap = snap.docs[0];
+    const coproId = docSnap.id;
+    const data = docSnap.data();
+    const pseudoKey = normalizePseudo(pseudo);
+
+    // Vérifie que le pseudo n'est pas déjà pris
+    const mQ = query(membersCol(coproId), where("pseudoKey", "==", pseudoKey));
+    const mSnap = await getDocs(mQ);
+    if(!mSnap.empty){
+      errEl.textContent = `Le pseudo "${pseudo}" est déjà utilisé dans cette copropriété. Choisissez-en un autre, ou connectez-vous si c'est votre compte.`;
+      show(errEl); return;
     }
 
-    saveSession();
+    // Création du compte
+    const memberId = generateMemberId();
+    await setDoc(doc(membersCol(coproId), memberId), {
+      pseudo,
+      pseudoKey,
+      personalCode,
+      personalCodeReset: false,
+      email: email || null,
+      createdAt: serverTimestamp(),
+    });
 
-    toast(`Bienvenue, ${pseudo} !`, "success");
+    state.coproId = coproId;
+    state.coproName = data.name;
+    state.coproCode = data.code;
+    state.pseudo = pseudo;
+    state.email = email;
+    state.memberId = memberId;
+    state.isAdmin = false;
+    saveSession();
+    toast(`Compte créé ! Bienvenue, ${pseudo} 🎉`, "success");
     enterCoproSpace();
   }catch(err){
     console.error(err);
