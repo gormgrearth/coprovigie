@@ -660,6 +660,7 @@ h1,h2,h3{ margin:0; }
     </div>
     <div class="topbar-right">
       <span id="topbarUser" class="topbar-user"></span>
+      <button id="btnUserPrefs" class="btn-ghost btn-small" hidden title="Mes préférences">⚙️</button>
       <button id="btnAdminToggle" class="btn-ghost btn-small" hidden>Admin</button>
       <button id="btnDeleteMyAccount" class="btn-ghost btn-small btn-danger-ghost" hidden>Supprimer mon compte</button>
       <button id="btnLogout" class="btn-ghost btn-small">Quitter</button>
@@ -1051,6 +1052,23 @@ h1,h2,h3{ margin:0; }
 </div>
 
 <!-- ============ MODALE: nouveau signalement ============ -->
+<!-- ============ MODALE PRÉFÉRENCES UTILISATEUR ============ -->
+<div id="userPrefsModal" class="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:380px;">
+    <button class="modal-close" id="userPrefsModalClose" aria-label="Fermer">✕</button>
+    <div style="padding:4px 0 16px;">
+      <p class="eyebrow">Mon compte</p>
+      <h3 style="margin:0 0 20px;">Préférences</h3>
+      <div class="field">
+        <span class="field-label">Bâtiment / lieu par défaut</span>
+        <select id="prefDefaultGroup" class="input select"></select>
+        <span class="field-hint">Ce lieu sera pré-sélectionné à chaque nouveau signalement. Vous pourrez toujours le changer au moment de signaler.</span>
+      </div>
+      <button id="btnSaveUserPrefs" class="btn-primary btn-full" style="margin-top:20px;">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <div id="reportModal" class="modal-overlay" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
     <button class="modal-close" id="modalClose" aria-label="Fermer">✕</button>
@@ -1158,7 +1176,8 @@ let state = {
   groupId: null,    // sous-groupe sélectionné pour signaler
   pseudo: null,
   email: null,        // email optionnel pour le lien magique de reconnexion
-  memberId: null,   // identifiant unique de résident (preuve d'auteur, anti-usurpation)
+  memberId: null,
+  defaultGroupId: null, // bâtiment préféré de l'utilisateur (pré-sélectionné à la création d'un signalement)   // identifiant unique de résident (preuve d'auteur, anti-usurpation)
   isAdmin: false,
   groups: [],
   types: [],
@@ -1202,6 +1221,7 @@ function saveSession(){
     memberId: state.memberId,
     isAdmin: state.isAdmin,
     email: state.email || null,
+    defaultGroupId: state.defaultGroupId || null,
   }));
 }
 function loadSession(){
@@ -1318,6 +1338,7 @@ async function init(){
         state.email = session.email || null;
         state.memberId = session.memberId || null;
         state.isAdmin = !!session.isAdmin;
+        state.defaultGroupId = session.defaultGroupId || null;
         saveSession();
         enterCoproSpace();
         return;
@@ -1378,6 +1399,10 @@ function bindStaticEvents(){
   $("formSettingsPass").addEventListener("submit", onSettingsPass);
 
   // Topbar
+  $("btnUserPrefs").addEventListener("click", openUserPrefsModal);
+  $("userPrefsModalClose").addEventListener("click", () => hide($("userPrefsModal")));
+  $("userPrefsModal").addEventListener("click", e => { if(e.target.id === "userPrefsModal") hide($("userPrefsModal")); });
+  $("btnSaveUserPrefs").addEventListener("click", saveUserPrefs);
   $("btnLogout").addEventListener("click", logout);
   $("btnAdminToggle").addEventListener("click", () => {
     populateAdminScreen();
@@ -1667,6 +1692,7 @@ async function onLoginSubmit(e){
     state.pseudo = memberData.pseudo;
     state.email = memberData.email || null;
     state.memberId = memberDoc.id;
+    state.defaultGroupId = memberData.defaultGroupId || null;
     state.isAdmin = false;
     saveSession();
     toast(`Bienvenue, ${state.pseudo} !`, "success");
@@ -1797,6 +1823,40 @@ async function onAdminLoginSubmit(e){
   }
 }
 
+// =========================================================
+// PRÉFÉRENCES UTILISATEUR
+// =========================================================
+function openUserPrefsModal(){
+  const sel = $("prefDefaultGroup");
+  sel.innerHTML = `<option value="">— Aucun bâtiment par défaut —</option>`;
+  state.groups.forEach(g => {
+    const opt = document.createElement("option");
+    opt.value = g.id;
+    opt.textContent = g.name;
+    if(g.id === state.defaultGroupId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  show($("userPrefsModal"));
+}
+
+async function saveUserPrefs(){
+  const sel = $("prefDefaultGroup");
+  const groupId = sel.value || null;
+  state.defaultGroupId = groupId;
+  saveSession();
+  // Persistance aussi dans Firestore si l'utilisateur a un memberId
+  if(state.memberId){
+    try{
+      await updateDoc(doc(membersCol(state.coproId), state.memberId), {
+        defaultGroupId: groupId || null,
+      });
+    }catch(e){ console.error("prefs save", e); }
+  }
+  hide($("userPrefsModal"));
+  const groupName = groupId ? state.groups.find(g => g.id === groupId)?.name : null;
+  toast(groupName ? `Bâtiment par défaut : ${groupName}` : "Bâtiment par défaut supprimé", "success");
+}
+
 function logout(){
   if(state.unsubReports) state.unsubReports();
   if(state.unsubGroups) state.unsubGroups();
@@ -1821,6 +1881,7 @@ function enterCoproSpace(){
   // Bouton "Supprimer mon compte" : visible pour les résidents qui ont un memberId
   // (pas pour l'admin connecté par mot de passe, qui supprime via les réglages)
   if(!state.isAdmin && state.memberId) show($("btnDeleteMyAccount")); else hide($("btnDeleteMyAccount"));
+  if(!state.isAdmin && state.memberId) show($("btnUserPrefs")); else hide($("btnUserPrefs"));
 
   listenGroups();
   listenTypes();
@@ -2105,7 +2166,7 @@ function openReportModal(type){
   $("reportModalTitle").textContent = type.name;
   $("modalSub").textContent = state.coproName;
 
-  // Peupler le select de lieu
+  // Peupler le select de lieu, pré-sélectionner le bâtiment par défaut
   const sel = $("reportGroupSelect");
   sel.innerHTML = "";
   if(state.groups.length === 0){
@@ -2115,6 +2176,7 @@ function openReportModal(type){
       const opt = document.createElement("option");
       opt.value = g.id;
       opt.textContent = g.name;
+      if(g.id === state.defaultGroupId) opt.selected = true;
       sel.appendChild(opt);
     });
   }
