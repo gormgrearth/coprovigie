@@ -43,6 +43,34 @@
   --radius-l: 22px;
   --shadow-card: 0 1px 2px rgba(28,43,46,.04), 0 4px 14px rgba(28,43,46,.06);
   --shadow-pop: 0 12px 32px rgba(28,43,46,.16), 0 4px 10px rgba(28,43,46,.08);
+
+  /* wave bg */
+  --wave-color: rgba(28,43,46,.04);
+}
+
+/* ---- DARK MODE ---- */
+[data-theme="dark"]{
+  --paper:        #141E20;
+  --paper-raised: #1E2C30;
+  --ink:          #EAE6DC;
+  --ink-soft:     #A8B8BB;
+  --meta:         #6E8285;
+  --line:         #2E3E42;
+  --line-soft:    #253438;
+
+  --signal:       #E8724E;
+  --signal-dark:  #F0906E;
+  --signal-tint:  #3A1F18;
+
+  --ok:           #5DBF8E;
+  --ok-tint:      #163324;
+
+  --warn:         #E5A04A;
+  --warn-tint:    #362410;
+
+  --shadow-card: 0 1px 3px rgba(0,0,0,.25), 0 4px 14px rgba(0,0,0,.3);
+  --shadow-pop: 0 12px 32px rgba(0,0,0,.5);
+  --wave-color: rgba(255,255,255,.03);
 }
 
 *,*::before,*::after{ box-sizing:border-box; }
@@ -63,6 +91,20 @@ body{
   font-family:var(--body);
   -webkit-font-smoothing:antialiased;
   line-height:1.5;
+  transition: background .3s ease, color .3s ease;
+}
+/* Wave background — SVG encodé inline pour éviter un fichier externe */
+body::before{
+  content:"";
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Cpath d='M0 300 Q200 220 400 300 Q600 380 800 300 L800 600 L0 600Z' fill='rgba(28%2C43%2C46%2C.035)'/%3E%3Cpath d='M0 420 Q200 350 400 420 Q600 490 800 420 L800 600 L0 600Z' fill='rgba(28%2C43%2C46%2C.025)'/%3E%3C/svg%3E");
+  background-size: 100% auto;
+  background-position: center bottom;
+  background-repeat: no-repeat;
+  opacity: 1;
+}
+[data-theme="dark"] body::before{
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Cpath d='M0 300 Q200 220 400 300 Q600 380 800 300 L800 600 L0 600Z' fill='rgba(255%2C255%2C255%2C.025)'/%3E%3Cpath d='M0 420 Q200 350 400 420 Q600 490 800 420 L800 600 L0 600Z' fill='rgba(255%2C255%2C255%2C.015)'/%3E%3C/svg%3E");
 }
 button, input, textarea, select{ font-family:inherit; }
 button{ cursor:pointer; }
@@ -115,25 +157,25 @@ h1,h2,h3{ margin:0; }
 .topbar{
   position:sticky; top:0; z-index:20;
   display:flex; align-items:center; justify-content:space-between;
-  padding:14px 20px;
-  background:rgba(247,245,240,.92);
-  backdrop-filter:blur(8px);
-  border-bottom:1px solid var(--line);
+  padding:10px 16px;
+  background:color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line-soft);
 }
-.topbar-left{ display:flex; align-items:center; gap:10px; min-width:0; }
-.topbar-mark{ color:var(--signal); font-size:20px; line-height:1; }
+.topbar-left{ display:flex; align-items:center; gap:8px; min-width:0; flex:1; }
+.topbar-mark{ color:var(--signal); font-size:18px; line-height:1; flex-shrink:0; }
 .topbar-id{ display:flex; flex-direction:column; min-width:0; }
 .topbar-id strong{
-  font-family:var(--display); font-weight:700; font-size:15px;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:46vw;
+  font-family:var(--display); font-weight:700; font-size:14px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.topbar-id span{ font-size:11px; color:var(--meta); font-family:var(--mono); }
-.topbar-right{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.topbar-id span{ font-size:10px; color:var(--meta); font-family:var(--mono); }
+.topbar-right{ display:flex; align-items:center; gap:4px; flex-shrink:0; }
 .topbar-user{
-  font-size:13px; color:var(--ink-soft); font-weight:600;
-  display:none;
+  font-size:12px; color:var(--ink-soft); font-weight:600;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:22vw;
+  display:inline;
 }
-@media(min-width:560px){ .topbar-user{ display:inline; } }
 
 /* =========================================================
    BUTTONS
@@ -291,22 +333,85 @@ h1,h2,h3{ margin:0; }
 }
 
 /* =========================================================
-   DASHBOARD
+   DASHBOARD — layout scrollable avec section signalements fixe
 ========================================================= */
-.dash-head{
-  display:flex; align-items:flex-end; justify-content:space-between; gap:16px;
-  flex-wrap:wrap;
-  margin-bottom:22px;
+#screenDashboard{
+  padding:0;
+  display:flex; flex-direction:column;
+  height:calc(100vh - 49px); /* hauteur topbar ≈49px */
+  overflow:hidden;
 }
-.group-select-wrap{ display:flex; flex-direction:column; gap:6px; min-width:200px; }
-.group-select-wrap .field-label{ font-size:12px; }
-.group-select-wrap .select{ padding:10px 36px 10px 12px; font-size:14px; font-weight:600; }
+.dash-signal-panel{
+  flex-shrink:0;
+  padding:16px 20px 12px;
+  border-bottom:1px solid var(--line-soft);
+}
+.dash-signal-head{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:10px;
+}
+.dash-signal-title{
+  font-family:var(--display); font-weight:700;
+  font-size:clamp(18px,4vw,22px);
+  margin:0;
+}
+.dash-toggle-grid{
+  background:none; border:none; color:var(--meta);
+  font-size:13px; font-weight:600; display:flex; align-items:center; gap:5px;
+  padding:6px 10px; border-radius:var(--radius-s);
+  transition:background .15s;
+}
+.dash-toggle-grid:hover{ background:var(--line-soft); color:var(--ink); }
+.dash-toggle-grid .toggle-chevron{
+  display:inline-block; transition:transform .25s ease; font-size:11px;
+}
+.dash-toggle-grid.collapsed .toggle-chevron{ transform:rotate(-90deg); }
+
+.dash-lieu-row{
+  display:flex; align-items:center; gap:10px; margin-bottom:10px;
+}
+.dash-lieu-label{ font-size:12px; font-weight:600; color:var(--meta); white-space:nowrap; }
+.dash-lieu-select{
+  flex:1; appearance:none;
+  background:var(--paper-raised) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%231C2B2E' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border:1.5px solid var(--line); border-radius:var(--radius-s);
+  padding:8px 32px 8px 11px;
+  font-size:14px; font-weight:600; color:var(--ink);
+  transition:border-color .15s;
+}
+[data-theme="dark"] .dash-lieu-select{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23EAE6DC' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.dash-lieu-select:focus{ border-color:var(--ink); outline:none; }
 
 .type-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill, minmax(108px,1fr));
-  gap:12px;
-  margin-bottom:8px;
+  grid-template-columns:repeat(auto-fill, minmax(100px,1fr));
+  gap:10px;
+  overflow:hidden;
+  transition:max-height .3s ease, opacity .25s ease, margin .25s ease;
+  max-height:600px; opacity:1;
+}
+.type-grid.collapsed{ max-height:0; opacity:0; margin:0; pointer-events:none; }
+
+/* Section signalements récents — scroll indépendant */
+.dash-reports-panel{
+  flex:1; display:flex; flex-direction:column; overflow:hidden;
+}
+.dash-reports-header{
+  flex-shrink:0; padding:12px 20px 0;
+}
+.dash-reports-scroll{
+  flex:1; overflow-y:auto; padding:8px 20px 24px;
+  -webkit-overflow-scrolling:touch;
+}
+.dash-reports-scroll::-webkit-scrollbar{ width:4px; }
+.dash-reports-scroll::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
+
+/* Titre "Signalements récents" inline avec divider */
+.reports-section-title{
+  font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--meta); margin:0 0 10px;
 }
 .type-btn{
   display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -438,6 +543,22 @@ h1,h2,h3{ margin:0; }
   padding:4px 8px; border-radius:6px;
 }
 .manage-item .mi-del:hover{ color:var(--signal-dark); background:var(--signal-tint); }
+
+.theme-toggle-row{ display:flex; gap:8px; }
+.theme-btn{
+  flex:1; padding:9px 6px; border-radius:var(--radius-s);
+  border:2px solid var(--line); background:var(--paper-raised);
+  color:var(--ink-soft); font-size:13px; font-weight:600;
+  transition:border-color .15s, background .15s, color .15s;
+}
+.theme-btn:hover{ border-color:var(--ink); color:var(--ink); }
+.theme-btn.active{ border-color:var(--ink); background:var(--ink); color:var(--paper); }
+
+/* inputs et cards en dark mode */
+[data-theme="dark"] .input{ background:var(--paper-raised); color:var(--ink); border-color:var(--line); }
+[data-theme="dark"] .topbar{ background:color-mix(in srgb, var(--paper) 92%, transparent); }
+[data-theme="dark"] .select{ background-color:var(--paper-raised); }
+[data-theme="dark"] .dash-lieu-select{ background-color:var(--paper-raised); color:var(--ink); border-color:var(--line); }
 
 .old-resolved-toggle{
   display:flex; align-items:center; gap:8px;
@@ -662,7 +783,6 @@ h1,h2,h3{ margin:0; }
       <span id="topbarUser" class="topbar-user"></span>
       <button id="btnUserPrefs" class="btn-ghost btn-small" hidden title="Mes préférences">⚙️</button>
       <button id="btnAdminToggle" class="btn-ghost btn-small" hidden>Admin</button>
-      <button id="btnDeleteMyAccount" class="btn-ghost btn-small btn-danger-ghost" hidden>Supprimer mon compte</button>
       <button id="btnLogout" class="btn-ghost btn-small">Quitter</button>
     </div>
   </header>
@@ -907,37 +1027,42 @@ h1,h2,h3{ margin:0; }
   ====================================================== -->
   <section id="screenDashboard" class="screen" hidden>
 
-    <div class="dash-head">
-      <div>
-        <p class="eyebrow">Signaler</p>
-        <h2 class="screen-title">Que se passe-t-il ?</h2>
+    <!-- Panneau supérieur : signalement (collapsible) -->
+    <div class="dash-signal-panel">
+      <div class="dash-signal-head">
+        <h2 class="dash-signal-title">Que se passe-t-il ?</h2>
+        <button id="btnToggleGrid" class="dash-toggle-grid" aria-expanded="true" aria-controls="typeGrid">
+          <span>Réduire</span>
+          <span class="toggle-chevron">▾</span>
+        </button>
       </div>
-      <label class="group-select-wrap">
-        <span class="field-label">Lieu concerné</span>
-        <select id="groupSelect" class="input select"></select>
-      </label>
+      <div class="dash-lieu-row">
+        <span class="dash-lieu-label">Lieu&nbsp;:</span>
+        <select id="groupSelect" class="dash-lieu-select"></select>
+      </div>
+      <div id="typeGrid" class="type-grid"></div>
     </div>
 
-    <div id="typeGrid" class="type-grid"></div>
-
-    <div class="dash-divider">
-      <span>Signalements récents</span>
-    </div>
-
-    <div class="filter-row">
-      <button class="chip chip-active" data-filter="all">Tous</button>
-      <button class="chip" data-filter="reported">Signalés</button>
-      <button class="chip" data-filter="in_progress">En cours</button>
-      <button class="chip" data-filter="resolved">Résolus</button>
-    </div>
-
-    <label id="oldResolvedToggleWrap" class="old-resolved-toggle" hidden>
-      <input type="checkbox" id="showOldResolved">
-      <span>Afficher aussi les signalements résolus de plus de <span id="oldResolvedDaysLabel">—</span> jours</span>
-    </label>
-
-    <div id="reportsList" class="reports-list">
-      <p class="empty-state">Chargement des signalements…</p>
+    <!-- Panneau inférieur : signalements récents avec scroll autonome -->
+    <div class="dash-reports-panel">
+      <div class="dash-reports-header">
+        <p class="reports-section-title">Signalements récents</p>
+        <div class="filter-row">
+          <button class="chip chip-active" data-filter="all">Tous</button>
+          <button class="chip" data-filter="reported">Signalés</button>
+          <button class="chip" data-filter="in_progress">En cours</button>
+          <button class="chip" data-filter="resolved">Résolus</button>
+        </div>
+        <label id="oldResolvedToggleWrap" class="old-resolved-toggle" hidden>
+          <input type="checkbox" id="showOldResolved">
+          <span>Afficher aussi les résolus de plus de <span id="oldResolvedDaysLabel">—</span> jours</span>
+        </label>
+      </div>
+      <div class="dash-reports-scroll">
+        <div id="reportsList" class="reports-list">
+          <p class="empty-state">Chargement des signalements…</p>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -1054,17 +1179,65 @@ h1,h2,h3{ margin:0; }
 <!-- ============ MODALE: nouveau signalement ============ -->
 <!-- ============ MODALE PRÉFÉRENCES UTILISATEUR ============ -->
 <div id="userPrefsModal" class="modal-overlay" hidden>
-  <div class="modal" role="dialog" aria-modal="true" style="max-width:380px;">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:420px;">
     <button class="modal-close" id="userPrefsModalClose" aria-label="Fermer">✕</button>
-    <div style="padding:4px 0 16px;">
-      <p class="eyebrow">Mon compte</p>
-      <h3 style="margin:0 0 20px;">Préférences</h3>
-      <div class="field">
-        <span class="field-label">Bâtiment / lieu par défaut</span>
-        <select id="prefDefaultGroup" class="input select"></select>
-        <span class="field-hint">Ce lieu sera pré-sélectionné à chaque nouveau signalement. Vous pourrez toujours le changer au moment de signaler.</span>
+    <p class="eyebrow" style="margin-bottom:4px;">Mon compte</p>
+    <h3 style="margin:0 0 22px;">Préférences</h3>
+
+    <!-- Bâtiment par défaut -->
+    <div class="field" style="margin-bottom:18px;">
+      <span class="field-label">Bâtiment / lieu par défaut</span>
+      <select id="prefDefaultGroup" class="input select"></select>
+      <span class="field-hint">Pré-sélectionné à chaque nouveau signalement.</span>
+    </div>
+
+    <!-- Thème -->
+    <div class="field" style="margin-bottom:18px;">
+      <span class="field-label">Thème d'affichage</span>
+      <div class="theme-toggle-row">
+        <button type="button" class="theme-btn" id="btnThemeLight" data-theme-val="light">☀️ Clair</button>
+        <button type="button" class="theme-btn" id="btnThemeDark" data-theme-val="dark">🌙 Sombre</button>
+        <button type="button" class="theme-btn" id="btnThemeAuto" data-theme-val="auto">🖥 Auto</button>
       </div>
-      <button id="btnSaveUserPrefs" class="btn-primary btn-full" style="margin-top:20px;">Enregistrer</button>
+    </div>
+
+    <button id="btnSaveUserPrefs" class="btn-primary btn-full" style="margin-bottom:24px;">Enregistrer les préférences</button>
+
+    <div class="dash-divider"><span>Mon profil</span></div>
+
+    <!-- Changer le pseudo -->
+    <form id="formChangePseudo" class="inline-form" style="margin-top:14px;">
+      <label class="field" style="flex:1;">
+        <span class="field-label">Changer mon pseudo</span>
+        <input id="newPseudo" type="text" class="input" maxlength="30" placeholder="Nouveau pseudo" autocomplete="off">
+      </label>
+      <button type="submit" class="btn-outline" style="align-self:flex-end;">Changer</button>
+    </form>
+    <p id="pseudoChangeError" class="form-error" hidden style="margin-top:6px;"></p>
+
+    <!-- Changer l'email -->
+    <form id="formChangeEmail" class="inline-form" style="margin-top:14px;">
+      <label class="field" style="flex:1;">
+        <span class="field-label">Changer mon e-mail</span>
+        <input id="newEmail" type="email" class="input" maxlength="120" placeholder="nouvelle@adresse.fr" autocomplete="email">
+      </label>
+      <button type="submit" class="btn-outline" style="align-self:flex-end;">Changer</button>
+    </form>
+
+    <!-- Changer le code personnel -->
+    <form id="formChangeCode" class="inline-form" style="margin-top:14px;">
+      <label class="field" style="flex:1;">
+        <span class="field-label">Nouveau code personnel</span>
+        <input id="newPersonalCode" type="password" class="input" maxlength="20" placeholder="4 caractères min." autocomplete="new-password">
+      </label>
+      <button type="submit" class="btn-outline" style="align-self:flex-end;">Changer</button>
+    </form>
+
+    <div style="margin-top:28px; padding-top:16px; border-top:1px solid var(--line-soft);">
+      <button id="btnDeleteMyAccount" class="btn-outline btn-full" style="border-color:var(--signal);color:var(--signal-dark);">
+        Supprimer mon compte
+      </button>
+      <p class="field-hint" style="margin-top:6px; text-align:center;">Cette action est irréversible. Vos signalements seront conservés.</p>
     </div>
   </div>
 </div>
@@ -1303,6 +1476,7 @@ const historyCol   = (coproId, reportId) => collection(db, "coprovigie", coproId
 // On ne peut donc pas écouter cet événement (il ne se déclencherait
 // jamais) : on appelle init() directement, le DOM est déjà prêt.
 init();
+loadTheme();
 
 async function init(){
   bindStaticEvents();
@@ -1403,12 +1577,27 @@ function bindStaticEvents(){
   $("userPrefsModalClose").addEventListener("click", () => hide($("userPrefsModal")));
   $("userPrefsModal").addEventListener("click", e => { if(e.target.id === "userPrefsModal") hide($("userPrefsModal")); });
   $("btnSaveUserPrefs").addEventListener("click", saveUserPrefs);
+  $("btnDeleteMyAccount").addEventListener("click", onDeleteMyAccount);
+  $("formChangePseudo").addEventListener("submit", onChangePseudo);
+  $("formChangeEmail").addEventListener("submit", onChangeEmail);
+  $("formChangeCode").addEventListener("submit", onChangeCode);
+  document.querySelectorAll(".theme-btn").forEach(btn => {
+    btn.addEventListener("click", () => applyTheme(btn.dataset.themeVal));
+  });
+  // Toggle grille de signalement
+  $("btnToggleGrid").addEventListener("click", () => {
+    const grid = $("typeGrid");
+    const btn = $("btnToggleGrid");
+    const collapsed = grid.classList.toggle("collapsed");
+    btn.classList.toggle("collapsed", collapsed);
+    btn.querySelector("span:first-child").textContent = collapsed ? "Afficher" : "Réduire";
+    btn.setAttribute("aria-expanded", String(!collapsed));
+  });
   $("btnLogout").addEventListener("click", logout);
   $("btnAdminToggle").addEventListener("click", () => {
     populateAdminScreen();
     showScreen("screenAdmin");
   });
-  $("btnDeleteMyAccount").addEventListener("click", onDeleteMyAccount);
   $("btnDeleteCopro").addEventListener("click", onDeleteCopro);
   $("btnBackToDash").addEventListener("click", () => showScreen("screenDashboard"));
 
@@ -1824,37 +2013,138 @@ async function onAdminLoginSubmit(e){
 }
 
 // =========================================================
+// THÈME (clair / sombre / auto)
+// =========================================================
+const LS_THEME = "coprovigie_theme";
+
+function applyTheme(theme){
+  const root = document.documentElement;
+  if(theme === "dark"){ root.setAttribute("data-theme","dark"); }
+  else if(theme === "light"){ root.removeAttribute("data-theme"); }
+  else{
+    // auto = suivre la préférence système
+    const prefersDark = window.matchMedia("(prefers-color-scheme:dark)").matches;
+    if(prefersDark) root.setAttribute("data-theme","dark");
+    else root.removeAttribute("data-theme");
+  }
+  localStorage.setItem(LS_THEME, theme);
+  // Mettre à jour les boutons actifs dans la modale
+  document.querySelectorAll(".theme-btn").forEach(b => b.classList.toggle("active", b.dataset.themeVal === theme));
+}
+
+function loadTheme(){
+  const saved = localStorage.getItem(LS_THEME) || "auto";
+  applyTheme(saved);
+}
+
+// Auto-update si la préférence système change et que le mode est "auto"
+window.matchMedia("(prefers-color-scheme:dark)").addEventListener("change", () => {
+  if((localStorage.getItem(LS_THEME) || "auto") === "auto") applyTheme("auto");
+});
+
+// =========================================================
 // PRÉFÉRENCES UTILISATEUR
 // =========================================================
 function openUserPrefsModal(){
+  // Select bâtiment
   const sel = $("prefDefaultGroup");
   sel.innerHTML = `<option value="">— Aucun bâtiment par défaut —</option>`;
   state.groups.forEach(g => {
     const opt = document.createElement("option");
-    opt.value = g.id;
-    opt.textContent = g.name;
+    opt.value = g.id; opt.textContent = g.name;
     if(g.id === state.defaultGroupId) opt.selected = true;
     sel.appendChild(opt);
   });
+  // Pseudo et email pré-remplis
+  $("newPseudo").value = state.pseudo || "";
+  $("newEmail").value = state.email || "";
+  $("newPersonalCode").value = "";
+  hide($("pseudoChangeError"));
+  // Thème actif
+  const currentTheme = localStorage.getItem(LS_THEME) || "auto";
+  document.querySelectorAll(".theme-btn").forEach(b => b.classList.toggle("active", b.dataset.themeVal === currentTheme));
   show($("userPrefsModal"));
 }
 
 async function saveUserPrefs(){
-  const sel = $("prefDefaultGroup");
-  const groupId = sel.value || null;
+  const groupId = $("prefDefaultGroup").value || null;
   state.defaultGroupId = groupId;
   saveSession();
-  // Persistance aussi dans Firestore si l'utilisateur a un memberId
   if(state.memberId){
-    try{
-      await updateDoc(doc(membersCol(state.coproId), state.memberId), {
-        defaultGroupId: groupId || null,
-      });
-    }catch(e){ console.error("prefs save", e); }
+    try{ await updateDoc(doc(membersCol(state.coproId), state.memberId), { defaultGroupId: groupId || null }); }
+    catch(e){ console.error(e); }
   }
   hide($("userPrefsModal"));
   const groupName = groupId ? state.groups.find(g => g.id === groupId)?.name : null;
   toast(groupName ? `Bâtiment par défaut : ${groupName}` : "Bâtiment par défaut supprimé", "success");
+}
+
+async function onChangePseudo(e){
+  e.preventDefault();
+  const newPseudo = $("newPseudo").value.trim();
+  const errEl = $("pseudoChangeError");
+  hide(errEl);
+  if(!newPseudo || newPseudo === state.pseudo) return;
+  if(newPseudo.length < 2){ errEl.textContent = "Le pseudo doit faire au moins 2 caractères."; show(errEl); return; }
+  const btn = e.target.querySelector("button[type=submit]");
+  setBtnLoading(btn, true);
+  try{
+    const newKey = normalizePseudo(newPseudo);
+    // Vérifier l'unicité du nouveau pseudo
+    const mQ = query(membersCol(state.coproId), where("pseudoKey", "==", newKey));
+    const mSnap = await getDocs(mQ);
+    if(!mSnap.empty && mSnap.docs[0].id !== state.memberId){
+      errEl.textContent = `Le pseudo "${newPseudo}" est déjà utilisé.`; show(errEl); return;
+    }
+    await updateDoc(doc(membersCol(state.coproId), state.memberId), {
+      pseudo: newPseudo, pseudoKey: newKey,
+    });
+    state.pseudo = newPseudo;
+    $("topbarUser").textContent = newPseudo;
+    saveSession();
+    toast("Pseudo mis à jour ✓", "success");
+  }catch(err){
+    console.error(err);
+    errEl.textContent = "Erreur lors de la mise à jour."; show(errEl);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+async function onChangeEmail(e){
+  e.preventDefault();
+  const newEmail = $("newEmail").value.trim().toLowerCase() || null;
+  const btn = e.target.querySelector("button[type=submit]");
+  setBtnLoading(btn, true);
+  try{
+    await updateDoc(doc(membersCol(state.coproId), state.memberId), { email: newEmail });
+    state.email = newEmail;
+    saveSession();
+    toast(newEmail ? "E-mail mis à jour ✓" : "E-mail supprimé", "success");
+  }catch(err){
+    console.error(err);
+    toast("Erreur lors de la mise à jour de l'e-mail.", "error");
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+async function onChangeCode(e){
+  e.preventDefault();
+  const newCode = $("newPersonalCode").value.trim();
+  if(newCode.length < 4){ toast("Le code doit faire au moins 4 caractères.", "error"); return; }
+  const btn = e.target.querySelector("button[type=submit]");
+  setBtnLoading(btn, true);
+  try{
+    await updateDoc(doc(membersCol(state.coproId), state.memberId), { personalCode: newCode, personalCodeReset: false });
+    $("newPersonalCode").value = "";
+    toast("Code personnel mis à jour ✓", "success");
+  }catch(err){
+    console.error(err);
+    toast("Erreur lors de la mise à jour du code.", "error");
+  }finally{
+    setBtnLoading(btn, false);
+  }
 }
 
 function logout(){
@@ -1880,7 +2170,6 @@ function enterCoproSpace(){
   if(state.isAdmin) show($("btnAdminToggle")); else hide($("btnAdminToggle"));
   // Bouton "Supprimer mon compte" : visible pour les résidents qui ont un memberId
   // (pas pour l'admin connecté par mot de passe, qui supprime via les réglages)
-  if(!state.isAdmin && state.memberId) show($("btnDeleteMyAccount")); else hide($("btnDeleteMyAccount"));
   if(!state.isAdmin && state.memberId) show($("btnUserPrefs")); else hide($("btnUserPrefs"));
 
   listenGroups();
