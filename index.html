@@ -244,6 +244,14 @@ h1,h2,h3{ margin:0; }
 .field{ display:flex; flex-direction:column; gap:7px; }
 .field-label{ font-size:13px; font-weight:600; color:var(--ink-soft); }
 .field-hint{ font-size:12px; color:var(--meta); line-height:1.4; margin-top:-2px; }
+.field-optional{ font-weight:400; color:var(--meta); font-size:12px; }
+.divider-or{
+  display:flex; align-items:center; gap:10px;
+  color:var(--meta); font-size:13px; margin:4px 0;
+}
+.divider-or::before,.divider-or::after{
+  content:""; flex:1; height:1px; background:var(--line-soft);
+}
 
 /* wrapper input + bouton œil (toggle visibilité) */
 .input-wrap{
@@ -711,12 +719,19 @@ h1,h2,h3{ margin:0; }
         </div>
         <span class="field-hint">À inventer librement la première fois (sert à vous reconnecter ensuite, même depuis un autre appareil).</span>
       </label>
+      <label class="field">
+        <span class="field-label">Adresse e-mail <span class="field-optional">— optionnel</span></span>
+        <input id="joinEmail" type="email" autocomplete="email" placeholder="pour retrouver vos accès" class="input" maxlength="120">
+        <span class="field-hint">Recommandé : si vous changez d'appareil ou oubliez votre code, un lien de reconnexion vous sera envoyé par e-mail. Votre adresse n'est pas partagée.</span>
+      </label>
       <p id="joinError" class="form-error" hidden></p>
       <button type="submit" class="btn-primary btn-large btn-full">
         <span>Entrer</span>
         <span class="btn-spinner" hidden></span>
       </button>
     </form>
+    <div class="divider-or"><span>ou</span></div>
+    <button id="btnMagicLink" class="btn-outline btn-large btn-full">📧 Me connecter avec un lien e-mail</button>
     <button id="btnForgotCode" class="link-muted">Code personnel oublié ? Demandez à votre administrateur de le réinitialiser.</button>
   </section>
 
@@ -728,6 +743,40 @@ h1,h2,h3{ margin:0; }
     <p class="eyebrow">Code oublié</p>
     <h2 class="screen-title">Demandez une réinitialisation</h2>
     <p class="screen-sub">Contactez l'administrateur de votre copropriété (syndic, conseil syndical…) en lui indiquant votre pseudo. Il pourra réinitialiser votre code personnel depuis son espace d'administration, onglet « Résidents ». Vous pourrez alors en choisir un nouveau à la prochaine connexion.</p>
+  </section>
+
+  <!-- =====================================================
+       ECRAN 1c — LIEN MAGIQUE (saisie email)
+  ====================================================== -->
+  <section id="screenMagicLink" class="screen screen-center" hidden>
+    <button class="btn-back" data-back="screenJoin">← Retour</button>
+    <p class="eyebrow">Connexion sans mot de passe</p>
+    <h2 class="screen-title">Recevoir un lien de connexion</h2>
+    <p class="screen-sub">Entrez l'adresse e-mail associée à votre compte. Vous recevrez un lien valable 1 heure qui vous connectera automatiquement.</p>
+    <form id="formMagicLink" class="stack-form">
+      <label class="field">
+        <span class="field-label">Adresse e-mail</span>
+        <input id="magicEmail" type="email" autocomplete="email" placeholder="votre@email.fr" required class="input" maxlength="120">
+      </label>
+      <p id="magicError" class="form-error" hidden></p>
+      <button type="submit" class="btn-primary btn-large btn-full">
+        <span>Envoyer le lien</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+    </form>
+    <p class="screen-sub" style="margin-top:16px; font-size:13px;">Si vous n'avez pas renseigné d'adresse e-mail lors de votre inscription, contactez votre administrateur.</p>
+  </section>
+
+  <!-- =====================================================
+       ECRAN 1d — LIEN MAGIQUE ENVOYÉ
+  ====================================================== -->
+  <section id="screenMagicLinkSent" class="screen screen-center" hidden>
+    <div style="font-size:48px; margin-bottom:16px;">📧</div>
+    <p class="eyebrow">Vérifiez vos e-mails</p>
+    <h2 class="screen-title">Lien envoyé !</h2>
+    <p class="screen-sub">Un lien de connexion a été envoyé à <strong id="magicEmailSent"></strong>. Cliquez dessus depuis cet appareil ou un autre — vous serez connecté automatiquement.</p>
+    <p class="screen-sub" style="font-size:13px; margin-top:12px;">Le lien expire dans 1 heure. Si vous ne le recevez pas, vérifiez vos spams.</p>
+    <button class="btn-outline" onclick="showScreen('screenJoin')" style="margin-top:24px;">← Retour à la connexion</button>
   </section>
 
   <!-- =====================================================
@@ -999,6 +1048,10 @@ import {
   updateDoc, deleteDoc, query, where, orderBy, onSnapshot,
   serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+import {
+  getAuth, sendSignInLinkToEmail, isSignInWithEmailLink,
+  signInWithEmailLink, onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 
 // --- Config Firebase ---
 const firebaseConfig = {
@@ -1016,11 +1069,12 @@ const firebaseConfig = {
 // ---------------------------------------------------------
 // INIT FIREBASE
 // ---------------------------------------------------------
-let app, db;
+let app, db, auth;
 let firebaseReady = false;
 try{
   app = initializeApp(firebaseConfig);
   db = getFirestore(app);
+  auth = getAuth(app);
   firebaseReady = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "VOTRE_API_KEY";
 }catch(e){
   console.error("Firebase init error", e);
@@ -1046,12 +1100,14 @@ const STATUS_LABELS = { reported: "Signalé", in_progress: "En cours", resolved:
 // ETAT LOCAL (persisté dans localStorage)
 // ---------------------------------------------------------
 const LS_KEY = "coprovigie_session";
+const LS_MAGIC_EMAIL = "coprovigie_magic_email"; // email en attente de confirmation du lien magique
 let state = {
   coproId: null,
   coproName: null,
   coproCode: null,
   groupId: null,    // sous-groupe sélectionné pour signaler
   pseudo: null,
+  email: null,        // email optionnel pour le lien magique de reconnexion
   memberId: null,   // identifiant unique de résident (preuve d'auteur, anti-usurpation)
   isAdmin: false,
   groups: [],
@@ -1095,6 +1151,7 @@ function saveSession(){
     pseudo: state.pseudo,
     memberId: state.memberId,
     isAdmin: state.isAdmin,
+    email: state.email || null,
   }));
 }
 function loadSession(){
@@ -1188,21 +1245,27 @@ async function init(){
     return;
   }
 
-  const session = loadSession();
   hide($("loader"));
   show($("app"));
 
+  // ---- Détection d'un lien magique (retour depuis l'email) ----
+  if(isSignInWithEmailLink(auth, window.location.href)){
+    await handleMagicLinkReturn();
+    return;
+  }
+
+  // ---- Restauration de session localStorage ----
+  const session = loadSession();
   if(session && session.coproId){
     try{
       const snap = await getDoc(coproRef(session.coproId));
       if(snap.exists()){
         const data = snap.data();
-        // vérifie que le pseudo/role est toujours valide (le code peut avoir changé,
-        // mais une session déjà ouverte reste valide tant que la copro existe)
         state.coproId = session.coproId;
         state.coproName = data.name;
         state.coproCode = data.code;
         state.pseudo = session.pseudo;
+        state.email = session.email || null;
         state.memberId = session.memberId || null;
         state.isAdmin = !!session.isAdmin;
         saveSession();
@@ -1220,6 +1283,7 @@ function bindStaticEvents(){
   $("btnGoCreate").addEventListener("click", () => showScreen("screenCreate"));
   $("btnGoAdminLogin").addEventListener("click", () => showScreen("screenAdminLogin"));
   $("btnForgotCode").addEventListener("click", () => showScreen("screenForgotCode"));
+  $("btnMagicLink").addEventListener("click", () => showScreen("screenMagicLink"));
 
   // Boutons œil : toggle visibilité des champs sensibles (codes et mots de passe)
   // État initial : tous les champs .input-code commencent masqués (type=password)
@@ -1250,6 +1314,7 @@ function bindStaticEvents(){
   $("formJoin").addEventListener("submit", onJoinSubmit);
   $("formCreate").addEventListener("submit", onCreateSubmit);
   $("formAdminLogin").addEventListener("submit", onAdminLoginSubmit);
+  $("formMagicLink").addEventListener("submit", onMagicLinkSubmit);
   $("formReport").addEventListener("submit", onReportSubmit);
   $("formAddGroup").addEventListener("submit", onAddGroup);
   $("formAddType").addEventListener("submit", onAddType);
@@ -1414,6 +1479,85 @@ function normalizePseudo(pseudo){
   return (pseudo || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+// =========================================================
+// LIEN MAGIQUE (Firebase Auth passwordless email link)
+// =========================================================
+const MAGIC_ACTION_CODE_SETTINGS = {
+  url: window.location.href.split("?")[0].split("#")[0],
+  handleCodeInApp: true,
+};
+
+async function onMagicLinkSubmit(e){
+  e.preventDefault();
+  const btn = e.target.querySelector("button[type=submit]");
+  const email = $("magicEmail").value.trim().toLowerCase();
+  const errEl = $("magicError");
+  hide(errEl);
+  if(!email){ errEl.textContent = "Merci d'entrer une adresse e-mail."; show(errEl); return; }
+  setBtnLoading(btn, true);
+  try{
+    await sendSignInLinkToEmail(auth, email, MAGIC_ACTION_CODE_SETTINGS);
+    localStorage.setItem(LS_MAGIC_EMAIL, email);
+    $("magicEmailSent").textContent = email;
+    showScreen("screenMagicLinkSent");
+  }catch(err){
+    console.error(err);
+    errEl.textContent = "Impossible d'envoyer le lien. Vérifiez l'adresse e-mail et réessayez.";
+    show(errEl);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+async function handleMagicLinkReturn(){
+  showScreen("screenWelcome");
+  let email = localStorage.getItem(LS_MAGIC_EMAIL);
+  if(!email){
+    email = prompt("Confirmez votre adresse e-mail pour terminer la connexion :");
+    if(!email){ showScreen("screenWelcome"); return; }
+  }
+  try{
+    await signInWithEmailLink(auth, email.trim().toLowerCase(), window.location.href);
+    localStorage.removeItem(LS_MAGIC_EMAIL);
+    window.history.replaceState({}, document.title, window.location.pathname);
+    // Recherche du membre associé à cet email dans toutes les copros
+    const allCopros = await getDocs(collection(db, "coprovigie"));
+    let found = false;
+    for(const coproSnap of allCopros.docs){
+      const coproId = coproSnap.id;
+      const coproData = coproSnap.data();
+      const mQ = query(membersCol(coproId), where("email", "==", email.trim().toLowerCase()));
+      const mSnap = await getDocs(mQ);
+      if(!mSnap.empty){
+        const memberDoc = mSnap.docs[0];
+        const memberData = memberDoc.data();
+        state.coproId = coproId;
+        state.coproName = coproData.name;
+        state.coproCode = coproData.code;
+        state.pseudo = memberData.pseudo;
+        state.email = email.trim().toLowerCase();
+        state.memberId = memberDoc.id;
+        state.isAdmin = !!memberData.isAdmin;
+        saveSession();
+        toast(`Bienvenue, ${state.pseudo} !`, "success");
+        enterCoproSpace();
+        found = true;
+        break;
+      }
+    }
+    if(!found){
+      toast("Aucun compte trouvé pour cet e-mail. Vérifiez ou créez un compte.", "error");
+      showScreen("screenJoin");
+    }
+  }catch(err){
+    console.error(err);
+    toast("Lien invalide ou expiré. Demandez un nouveau lien.", "error");
+    showScreen("screenMagicLink");
+  }finally{
+    await signOut(auth).catch(() => {});
+  }
+}
+
 async function onJoinSubmit(e){
   e.preventDefault();
   const btn = e.target.querySelector("button[type=submit]");
@@ -1488,8 +1632,15 @@ async function onJoinSubmit(e){
     state.coproName = data.name;
     state.coproCode = data.code;
     state.pseudo = pseudo;
+    state.email = $("joinEmail").value.trim().toLowerCase() || null;
     state.memberId = memberId;
     state.isAdmin = false;
+
+    // Si un email est fourni, on le sauvegarde dans le profil membre
+    if(state.email){
+      await updateDoc(doc(membersCol(coproId), memberId), { email: state.email }).catch(() => {});
+    }
+
     saveSession();
 
     toast(`Bienvenue, ${pseudo} !`, "success");
