@@ -1342,6 +1342,7 @@ const STATUS_LABELS = { reported: "Signalé", in_progress: "En cours", resolved:
 // ---------------------------------------------------------
 const LS_KEY = "coprovigie_session";
 const LS_MAGIC_EMAIL = "coprovigie_magic_email"; // email en attente de confirmation du lien magique
+const LS_THEME = "coprovigie_theme";
 let state = {
   coproId: null,
   coproName: null,
@@ -2015,7 +2016,6 @@ async function onAdminLoginSubmit(e){
 // =========================================================
 // THÈME (clair / sombre / auto)
 // =========================================================
-const LS_THEME = "coprovigie_theme";
 
 function applyTheme(theme){
   const root = document.documentElement;
