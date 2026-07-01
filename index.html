@@ -578,6 +578,17 @@ h1,h2,h3{ margin:0; }
 .history-comment{ font-size:13px; color:var(--ink-soft); margin-top:5px; }
 .history-photos{ margin-top:8px; }
 .history-photos .detail-photo-thumb{ width:56px; height:56px; }
+.history-item--comment{ background: color-mix(in srgb, var(--accent, #3D9A8B) 5%, var(--paper-raised)); }
+.history-comment-label{ font-size:12px; font-weight:700; color:var(--ink-soft); letter-spacing:.04em; }
+
+.add-comment-block{
+  margin-top:20px;
+  border-top:1.5px solid var(--line-soft);
+  padding-top:16px;
+}
+.add-comment-block form{
+  display:flex; flex-direction:column; gap:10px;
+}
 
 /* =========================================================
    TOAST
@@ -948,6 +959,10 @@ h1,h2,h3{ margin:0; }
     <h3 id="reportModalTitle">Signaler</h3>
     <p class="modal-sub" id="modalSub"></p>
     <form id="formReport">
+      <label class="field">
+        <span class="field-label">Lieu</span>
+        <select id="reportGroupSelect" class="input select"></select>
+      </label>
       <label class="field">
         <span class="field-label">Commentaire (facultatif)</span>
         <textarea id="reportComment" class="input textarea" rows="3" maxlength="500" placeholder="Précisez si besoin : étage, gravité, depuis quand…"></textarea>
@@ -1843,11 +1858,22 @@ function openReportModal(type){
   state.pendingType = type;
   $("modalIcon").textContent = type.icon || "❗";
   $("reportModalTitle").textContent = type.name;
-  const groupSel = $("groupSelect");
-  const groupLabel = groupSel.value === "all" || !groupSel.value
-    ? (state.groups[0]?.name || "Lieu non précisé")
-    : groupSel.options[groupSel.selectedIndex].textContent;
-  $("modalSub").textContent = `${state.coproName} · ${groupLabel}`;
+  $("modalSub").textContent = state.coproName;
+
+  // Peupler le select de lieu
+  const sel = $("reportGroupSelect");
+  sel.innerHTML = "";
+  if(state.groups.length === 0){
+    sel.innerHTML = `<option value="">Aucun lieu configuré</option>`;
+  } else {
+    state.groups.forEach(g => {
+      const opt = document.createElement("option");
+      opt.value = g.id;
+      opt.textContent = g.name;
+      sel.appendChild(opt);
+    });
+  }
+
   $("reportComment").value = "";
 
   state.pendingPhotos = [];
@@ -1857,7 +1883,6 @@ function openReportModal(type){
   const field = createPhotoPickerField(photoHolder);
   field.id = "reportPhotoField";
   $("reportComment").closest("label").after(field);
-  // garde state.pendingPhotos synchronisé avec le tableau réellement utilisé par le composant
   state.pendingPhotos = photoHolder.photos;
   state._reportPhotoHolder = photoHolder;
 
@@ -1870,15 +1895,9 @@ async function onReportSubmit(e){
   const btn = e.target.querySelector("button[type=submit]");
   if(!state.pendingType) return;
 
-  const groupSel = $("groupSelect");
-  let groupId = groupSel.value;
-  let groupName;
-  if(groupId === "all" || !groupId){
-    groupId = state.groups[0]?.id || null;
-    groupName = state.groups[0]?.name || "Non précisé";
-  }else{
-    groupName = groupSel.options[groupSel.selectedIndex].textContent;
-  }
+  const reportGroupSel = $("reportGroupSelect");
+  const groupId = reportGroupSel.value || state.groups[0]?.id || null;
+  const groupName = reportGroupSel.options[reportGroupSel.selectedIndex]?.textContent || state.groups[0]?.name || "Non précisé";
 
   const comment = $("reportComment").value.trim();
   const photosToUpload = (state._reportPhotoHolder?.photos || []).slice();
@@ -2042,9 +2061,24 @@ function openDetailModal(r, isAdminView){
       <p class="empty-state" style="padding:16px;">Chargement…</p>
     </div>
 
+    ${state.pseudo ? `
+      <div class="add-comment-block">
+        <form id="formAddComment">
+          <label class="field">
+            <span class="field-label">Ajouter un commentaire</span>
+            <textarea id="addCommentText" class="input textarea" rows="2" maxlength="500" placeholder="Votre observation, mise à jour…"></textarea>
+          </label>
+          <button type="submit" class="btn-outline" style="align-self:flex-end;">
+            <span>Publier</span>
+            <span class="btn-spinner" hidden></span>
+          </button>
+        </form>
+      </div>
+    ` : ""}
+
     ${editable ? `
-      <div style="display:flex; gap:8px; margin-top:20px;">
-        <button class="btn-outline btn-full" id="btnEditReport">Modifier mon commentaire</button>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button class="btn-outline btn-full" id="btnEditReport">Modifier mon signalement</button>
         <button class="btn-outline btn-full" id="btnDeleteReport" style="border-color:var(--signal);color:var(--signal-dark);">Supprimer</button>
       </div>
     ` : ""}
@@ -2083,6 +2117,46 @@ function openDetailModal(r, isAdminView){
     }
   }
 
+  // --- Commentaire libre (tout utilisateur connecté) ---
+  const formAddComment = $("formAddComment");
+  if(formAddComment){
+    const addCommentPhotoHolder = { photos: [] };
+    const photoField = createPhotoPickerField(addCommentPhotoHolder);
+    formAddComment.querySelector("label").after(photoField);
+
+    formAddComment.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = formAddComment.querySelector("button[type=submit]");
+      const text = $("addCommentText").value.trim();
+      const photos = addCommentPhotoHolder.photos.slice();
+      if(!text && photos.length === 0) return;
+      setBtnLoading(btn, true);
+      try{
+        const photoUrls = photos.length > 0 ? await resolvePendingPhotos(photos) : [];
+        await addDoc(historyCol(state.coproId, r.id), {
+          type: "comment",
+          toStatus: r.status,
+          author: state.pseudo,
+          authorId: state.memberId || null,
+          comment: text || "",
+          photos: photoUrls,
+          createdAt: serverTimestamp(),
+        });
+        $("addCommentText").value = "";
+        addCommentPhotoHolder.photos = [];
+        photoField.querySelector(".photo-previews").innerHTML = "";
+        photoField.querySelector(".photo-add-btn").disabled = false;
+        photoField.querySelector(".photo-add-btn span:last-child").textContent = "Ajouter une photo";
+        loadReportHistory(r.id);
+      }catch(err){
+        console.error(err);
+        toast("Erreur lors de l'envoi du commentaire", "error");
+      }finally{
+        setBtnLoading(btn, false);
+      }
+    });
+  }
+
   show($("detailModal"));
   loadReportHistory(r.id);
 }
@@ -2104,10 +2178,14 @@ async function loadReportHistory(reportId){
     }
     freshList.innerHTML = snap.docs.map(d => {
       const h = d.data();
+      const isComment = h.type === "comment";
       return `
-        <div class="history-item">
+        <div class="history-item ${isComment ? "history-item--comment" : ""}">
           <div class="history-top">
-            <span class="status-badge status-${h.toStatus}">${STATUS_LABELS[h.toStatus] || h.toStatus}</span>
+            ${isComment
+              ? `<span class="history-comment-label">💬 Commentaire</span>`
+              : `<span class="status-badge status-${h.toStatus}">${STATUS_LABELS[h.toStatus] || h.toStatus}</span>`
+            }
             <span class="history-meta">${formatDate(h.createdAt)}</span>
           </div>
           <div class="history-author">par ${escapeHtml(h.author || "anonyme")}</div>
@@ -2189,11 +2267,20 @@ function openStatusChangeModal(r, newStatus){
 // =========================================================
 function openEditReportModal(r){
   const content = $("detailContent");
+
+  const groupOptions = state.groups.map(g =>
+    `<option value="${g.id}" ${g.id === r.groupId ? "selected" : ""}>${escapeHtml(g.name)}</option>`
+  ).join("");
+
   content.innerHTML = `
     <div class="modal-icon">${escapeHtml(r.typeIcon || "❗")}</div>
     <h3>Modifier le signalement</h3>
-    <p class="modal-sub">${escapeHtml(r.typeName)} · ${escapeHtml(r.groupName || "")}</p>
+    <p class="modal-sub">${escapeHtml(r.typeName)}</p>
     <form id="formEditReport">
+      <label class="field">
+        <span class="field-label">Lieu</span>
+        <select id="editGroupSelect" class="input select">${groupOptions}</select>
+      </label>
       <label class="field">
         <span class="field-label">Commentaire</span>
         <textarea id="editComment" class="input textarea" rows="3" maxlength="500">${escapeHtml(r.comment || "")}</textarea>
@@ -2218,12 +2305,17 @@ function openEditReportModal(r){
     const btn = e.target.querySelector("button[type=submit]");
     const comment = $("editComment").value.trim();
     const photosToSave = editPhotoHolder.photos.slice();
+    const editGroupSel = $("editGroupSelect");
+    const newGroupId = editGroupSel.value || r.groupId;
+    const newGroupName = editGroupSel.options[editGroupSel.selectedIndex]?.textContent || r.groupName;
     setBtnLoading(btn, true);
     try{
       const urls = await resolvePendingPhotos(photosToSave);
       await updateDoc(doc(db, "coprovigie", state.coproId, "reports", r.id), {
         comment: comment,
         photos: urls,
+        groupId: newGroupId,
+        groupName: newGroupName,
         updatedAt: serverTimestamp(),
       });
       toast("Signalement modifié", "success");
