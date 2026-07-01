@@ -6,6 +6,21 @@
 <title>CoproVigie — Signaler une anomalie</title>
 <meta name="description" content="Signalez en quelques clics une anomalie dans votre copropriété.">
 <meta name="theme-color" content="#1C2B2E">
+
+<!-- Favicons -->
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="favicon-192.png" type="image/png" sizes="192x192">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="favicon-192.png">
+
+<!-- PWA / raccourci écran d'accueil -->
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CoproVigie">
+<meta name="mobile-web-app-capable" content="yes">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Archivo+Expanded:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -662,6 +677,24 @@ h1,h2,h3{ margin:0; }
 .photo-add-btn:hover{ border-color:var(--ink); color:var(--ink); }
 .photo-add-btn:disabled{ opacity:.45; cursor:not-allowed; }
 .photo-add-ic{ font-size:15px; }
+
+/* menu de choix de source photo (caméra / galerie-pc) */
+.photo-add-wrap{ position:relative; }
+.photo-source-menu{
+  position:absolute; top:calc(100% + 6px); left:0; z-index:30;
+  background:var(--paper-raised); border:1.5px solid var(--line);
+  border-radius:var(--radius-m); box-shadow:var(--shadow-card);
+  padding:6px; display:flex; flex-direction:column; gap:2px;
+  min-width:220px;
+}
+.photo-source-menu button{
+  display:flex; align-items:center; gap:10px;
+  padding:10px 12px; border-radius:var(--radius-s);
+  font-size:14px; font-weight:600; color:var(--ink); text-align:left;
+  background:transparent; border:none; width:100%;
+}
+.photo-source-menu button:hover{ background:var(--line-soft); }
+.photo-source-ic{ font-size:16px; flex-shrink:0; }
 
 /* galerie de photos (détail signalement) */
 .detail-photos{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
@@ -2363,16 +2396,32 @@ function createPhotoPickerField(holder, label = "Photos (facultatif, 3 max)"){
     <span class="field-label">${escapeHtml(label)}</span>
     <div class="photo-picker">
       <div class="photo-previews"></div>
-      <button type="button" class="photo-add-btn">
-        <span class="photo-add-ic">📷</span>
-        <span>Ajouter une photo</span>
-      </button>
+      <div class="photo-add-wrap">
+        <button type="button" class="photo-add-btn">
+          <span class="photo-add-ic">📷</span>
+          <span>Ajouter une photo</span>
+        </button>
+        <div class="photo-source-menu" hidden>
+          <button type="button" data-source="camera">
+            <span class="photo-source-ic">📷</span><span>Prendre une photo</span>
+          </button>
+          <button type="button" data-source="library">
+            <span class="photo-source-ic">🖼️</span><span>Choisir depuis la galerie / l'ordinateur</span>
+          </button>
+        </div>
+      </div>
+      <input type="file" accept="image/*" capture="environment" hidden>
       <input type="file" accept="image/*" hidden>
     </div>
   `;
   const previewsEl = wrap.querySelector(".photo-previews");
   const addBtn = wrap.querySelector(".photo-add-btn");
-  const fileInput = wrap.querySelector("input[type=file]");
+  const sourceMenu = wrap.querySelector(".photo-source-menu");
+  const cameraInput = wrap.querySelector("input[capture]");
+  const libraryInput = wrap.querySelectorAll("input[type=file]")[1];
+
+  function closeMenu(){ hide(sourceMenu); document.removeEventListener("click", onDocClick); }
+  function onDocClick(e){ if(!wrap.contains(e.target)) closeMenu(); }
 
   function render(){
     previewsEl.innerHTML = "";
@@ -2396,8 +2445,26 @@ function createPhotoPickerField(holder, label = "Photos (facultatif, 3 max)"){
         : "Ajouter une photo";
   }
 
-  addBtn.addEventListener("click", () => fileInput.click());
-  fileInput.addEventListener("change", async (e) => {
+  addBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if(addBtn.disabled) return;
+    if(sourceMenu.hidden){
+      show(sourceMenu);
+      document.addEventListener("click", onDocClick);
+    } else {
+      closeMenu();
+    }
+  });
+  sourceMenu.querySelector('[data-source="camera"]').addEventListener("click", () => {
+    closeMenu();
+    cameraInput.click();
+  });
+  sourceMenu.querySelector('[data-source="library"]').addEventListener("click", () => {
+    closeMenu();
+    libraryInput.click();
+  });
+
+  async function handleFile(e){
     const file = e.target.files && e.target.files[0];
     e.target.value = ""; // permet de resélectionner la même photo ensuite
     if(!file) return;
@@ -2417,7 +2484,9 @@ function createPhotoPickerField(holder, label = "Photos (facultatif, 3 max)"){
       console.error(err);
       toast("Impossible de charger cette photo.", "error");
     }
-  });
+  }
+  cameraInput.addEventListener("change", handleFile);
+  libraryInput.addEventListener("change", handleFile);
 
   render();
   return wrap;
