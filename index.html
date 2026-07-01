@@ -750,6 +750,9 @@ h1,h2,h3{ margin:0; }
   .topbar-user{ max-width:15vw; font-size:11px; }
   .topbar-right{ gap:2px; }
   .topbar .btn-small{ padding:8px 8px; font-size:12px; }
+  .filter-row{ flex-wrap:nowrap; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .filter-row::-webkit-scrollbar{ display:none; }
+  .chip{ padding:6px 10px; font-size:12px; white-space:nowrap; flex-shrink:0; }
 }
 @media (max-width:360px){
   .topbar-user{ display:none; }
