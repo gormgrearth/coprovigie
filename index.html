@@ -623,6 +623,25 @@ h1,h2,h3{ margin:0; }
 }
 .modal-close:hover{ background:var(--line); color:var(--ink); }
 
+/* modale politique de confidentialité */
+.modal-privacy{ max-width:620px; }
+.privacy-content h3{ font-size:15px; font-weight:800; margin:22px 0 8px; }
+.privacy-content h3:first-of-type{ margin-top:4px; }
+.privacy-content p{ font-size:14px; line-height:1.6; color:var(--ink-soft); margin:0 0 10px; }
+.privacy-content ul{ margin:0 0 10px; padding-left:20px; display:flex; flex-direction:column; gap:6px; }
+.privacy-content li{ font-size:14px; line-height:1.55; color:var(--ink-soft); }
+.privacy-content strong{ color:var(--ink); }
+
+/* lien global (bas de page, sur tous les écrans) */
+.app-footer-link{
+  position:fixed; left:0; right:0; bottom:8px;
+  margin:0 auto; width:fit-content;
+  font-size:11px; color:var(--ink-soft); text-decoration:underline;
+  background:var(--paper); border:none; z-index:20; padding:4px 10px;
+  border-radius:20px; opacity:.75;
+}
+.app-footer-link:hover{ color:var(--ink); opacity:1; }
+
 .modal-icon{
   width:52px; height:52px; border-radius:14px;
   background:var(--signal-tint); color:var(--signal-dark);
@@ -1207,6 +1226,11 @@ h1,h2,h3{ margin:0; }
           <button type="submit" class="btn-outline">Changer</button>
         </form>
       </div>
+      <div class="settings-card">
+        <h3>Confidentialité des données</h3>
+        <p class="settings-help">Consultez ce qui est expliqué aux résidents sur la collecte et la conservation de leurs données (e-mail, signalements, photos).</p>
+        <button type="button" id="btnOpenPrivacyAdmin" class="btn-outline">Voir la politique de confidentialité</button>
+      </div>
       <div class="settings-card settings-danger" style="border-color:var(--signal);margin-top:8px;">
         <h3 style="color:var(--signal-dark);">⚠ Zone de danger</h3>
         <p class="settings-help">Supprimer la copropriété effacera définitivement tous les signalements, lieux, types d'incidents et résidents. Cette action est irréversible.</p>
@@ -1314,7 +1338,60 @@ h1,h2,h3{ margin:0; }
   </div>
 </div>
 
-<!-- ============ TOAST ============ -->
+<!-- ============ LIEN GLOBAL — POLITIQUE DE CONFIDENTIALITÉ ============ -->
+<button id="btnOpenPrivacy" class="app-footer-link" type="button">Politique de confidentialité</button>
+
+<!-- ============ MODALE — POLITIQUE DE CONFIDENTIALITÉ ============ -->
+<div id="privacyModal" class="modal-overlay" hidden>
+  <div class="modal modal-privacy" role="dialog" aria-modal="true" aria-labelledby="privacyModalTitle">
+    <button class="modal-close" id="privacyModalClose" aria-label="Fermer">✕</button>
+    <div class="privacy-content">
+      <p class="eyebrow">CoproVigie</p>
+      <h2 id="privacyModalTitle" class="screen-title" style="margin-bottom:4px;">Politique de confidentialité</h2>
+      <p class="settings-help" style="margin-bottom:20px;">Dernière mise à jour : juillet 2026</p>
+
+      <h3>Quelles données sont collectées ?</h3>
+      <p>Lorsque vous utilisez CoproVigie, nous collectons :</p>
+      <ul>
+        <li><strong>Votre adresse e-mail</strong>, pour créer votre compte et vous permettre de vous connecter (mot de passe ou lien de connexion par e-mail) ;</li>
+        <li><strong>Le nom affiché</strong> que vous choisissez à l'inscription, visible des autres résidents de votre copropriété ;</li>
+        <li><strong>Le contenu de vos signalements</strong> : description, lieu, catégorie, et les photos que vous choisissez d'ajouter ;</li>
+        <li>Des <strong>informations techniques</strong> minimales liées à la connexion (horodatage de création de compte, dernière activité).</li>
+      </ul>
+      <p>Nous ne collectons ni numéro de téléphone, ni adresse postale, ni aucune donnée de localisation précise (le champ « lieu » d'un signalement correspond à un espace commun de l'immeuble, pas à votre position géographique).</p>
+
+      <h3>Pourquoi ces données sont-elles collectées ?</h3>
+      <ul>
+        <li><strong>L'e-mail</strong> sert exclusivement à l'authentification (connexion à votre compte) et, si cette fonctionnalité est activée par votre copropriété, à l'envoi de notifications liées aux signalements (nouveau signalement, changement de statut) ;</li>
+        <li><strong>Le nom affiché et les signalements</strong> permettent aux autres résidents et à l'administrateur de votre copropriété de suivre les anomalies signalées dans l'immeuble ;</li>
+        <li>Aucune donnée n'est utilisée à des fins publicitaires, revendue, ou partagée avec des tiers en dehors des prestataires techniques nécessaires au fonctionnement du service (voir ci-dessous).</li>
+      </ul>
+
+      <h3>Qui peut voir vos données ?</h3>
+      <ul>
+        <li>Votre <strong>nom affiché</strong> et vos <strong>signalements</strong> sont visibles par les résidents de votre copropriété et par son administrateur ;</li>
+        <li>Votre <strong>adresse e-mail</strong> n'est pas affichée aux autres résidents ; elle reste accessible uniquement à l'administrateur technique du service, dans le cadre strictement nécessaire à la gestion du compte ;</li>
+        <li>Vos données ne sont jamais partagées avec une autre copropriété que la vôtre.</li>
+      </ul>
+
+      <h3>Combien de temps vos données sont-elles conservées ?</h3>
+      <ul>
+        <li>Les données de votre compte (e-mail, nom affiché) sont conservées <strong>tant que votre compte est actif</strong> ;</li>
+        <li>Les signalements et photos associées sont conservés <strong>tant que la copropriété utilise le service</strong>, afin de garder un historique utile des interventions ;</li>
+        <li>Si vous demandez la suppression de votre compte, vos données personnelles (e-mail, nom) sont supprimées sous <strong>30 jours</strong>. Les signalements que vous avez créés peuvent être conservés de façon anonymisée, pour garder la trace des interventions réalisées dans l'immeuble ;</li>
+        <li>Si une copropriété cesse d'utiliser CoproVigie, ses données peuvent être supprimées à la demande de son administrateur.</li>
+      </ul>
+
+      <h3>Hébergement et sous-traitants</h3>
+      <p>CoproVigie utilise <strong>Firebase</strong> (Google) pour l'authentification et le stockage des données. Google agit comme sous-traitant au sens du RGPD.</p>
+
+      <h3>Vos droits</h3>
+      <p>Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, de suppression et de portabilité de vos données. Pour exercer ces droits, contactez l'administrateur de votre copropriété ou l'éditeur du service.</p>
+    </div>
+  </div>
+</div>
+
+
 <div id="toast" class="toast" hidden></div>
 
 <!-- ============ APPLICATION ============ -->
@@ -1599,6 +1676,16 @@ function bindStaticEvents(){
   document.querySelectorAll("[data-back]").forEach(btn => {
     btn.addEventListener("click", () => showScreen(btn.dataset.back));
   });
+
+  // Politique de confidentialité (accessible depuis n'importe quel écran)
+  const privacyModal = $("privacyModal");
+  const openPrivacy = () => show(privacyModal);
+  const closePrivacy = () => hide(privacyModal);
+  $("btnOpenPrivacy").addEventListener("click", openPrivacy);
+  const btnOpenPrivacyAdmin = $("btnOpenPrivacyAdmin");
+  if(btnOpenPrivacyAdmin) btnOpenPrivacyAdmin.addEventListener("click", openPrivacy);
+  $("privacyModalClose").addEventListener("click", closePrivacy);
+  privacyModal.addEventListener("click", (e) => { if(e.target.id === "privacyModal") closePrivacy(); });
 
   // Forms
   $("formLogin").addEventListener("submit", onLoginSubmit);
