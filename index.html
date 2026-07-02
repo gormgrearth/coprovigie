@@ -1409,7 +1409,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 import {
   getAuth, sendSignInLinkToEmail, isSignInWithEmailLink,
-  signInWithEmailLink, onAuthStateChanged, signOut
+  signInWithEmailLink, onAuthStateChanged, signOut,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  updatePassword, deleteUser
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 
 // --- Config Firebase ---
@@ -1437,6 +1439,44 @@ try{
   firebaseReady = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "VOTRE_API_KEY";
 }catch(e){
   console.error("Firebase init error", e);
+}
+
+// ---------------------------------------------------------------
+// Comptes Firebase Auth "synthétiques" — pas de Cloud Functions
+// (gratuit = plan Spark). Le vrai mot de passe / code personnel
+// n'est jamais stocké dans Firestore : Firebase Auth le vérifie
+// lui-même. Voir firestore.rules pour le détail des règles qui
+// s'appuient sur ce format d'e-mail.
+// ---------------------------------------------------------------
+const SYNTH_DOMAIN = "coprovigie.invalid";
+const adminEmail  = (coproId) => `admin_${coproId}@${SYNTH_DOMAIN}`;
+const memberEmail = (coproId, memberId) => `member_${coproId}_${memberId}@${SYNTH_DOMAIN}`;
+
+async function sha256Hex(text){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+// Le mot de passe Firebase Auth doit faire 6 caractères min. ; on dérive
+// donc toujours un hash (64 caractères hex) à partir du code choisi par
+// l'utilisateur, qui lui peut rester court (4 caractères min. pour un
+// code résident).
+const derivePassword = (secret) => sha256Hex(String(secret));
+
+const emailIndexRef  = (email) => doc(db, "emailIndex", email);
+const pseudoIndexCol = (coproId) => collection(db, "coprovigie", coproId, "pseudoIndex");
+const pseudoIndexRef = (coproId, pseudoKey) => doc(db, "coprovigie", coproId, "pseudoIndex", pseudoKey);
+
+function fnErrorMessage(err, fallback){
+  const map = {
+    "auth/email-already-in-use": "Ce pseudo est déjà utilisé dans cette copropriété.",
+    "auth/wrong-password": "Code incorrect.",
+    "auth/invalid-credential": "Identifiants incorrects.",
+    "auth/user-not-found": "Compte introuvable.",
+    "auth/too-many-requests": "Trop de tentatives. Réessayez dans quelques minutes.",
+    "auth/requires-recent-login": "Merci de vous reconnecter puis de réessayer.",
+  };
+  if(err && err.code && map[err.code]) return map[err.code];
+  return (err && err.message) ? err.message : fallback;
 }
 
 // ---------------------------------------------------------
@@ -1573,7 +1613,7 @@ function escapeHtml(str){
 
 // ---------------------------------------------------------
 // FIRESTORE PATHS
-// coprovigie/{coproId}                              -> doc copro (name, code, adminPass)
+// coprovigie/{coproId}                              -> doc copro (name, code, adminDisplayName)
 // coprovigie/{coproId}/groups/{groupId}              -> sous-groupes
 // coprovigie/{coproId}/types/{typeId}                -> types d'incidents
 // coprovigie/{coproId}/members/{memberId}             -> résidents (pseudo unique, anti-usurpation)
@@ -1617,9 +1657,16 @@ async function init(){
     return;
   }
 
+  // ---- Attend la restauration de la session Firebase Auth (les lectures
+  // Firestore sont désormais protégées par l'identité du compte connecté,
+  // voir firestore.rules) ----
+  const authUser = await new Promise((resolve) => {
+    const unsub = onAuthStateChanged(auth, (u) => { unsub(); resolve(u); });
+  });
+
   // ---- Restauration de session localStorage ----
   const session = loadSession();
-  if(session && session.coproId){
+  if(session && session.coproId && authUser){
     try{
       const snap = await getDoc(coproRef(session.coproId));
       if(snap.exists()){
@@ -1637,6 +1684,10 @@ async function init(){
         return;
       }
     }catch(e){ console.error(e); }
+  }
+  if(session && !authUser){
+    // La session Firebase Auth a expiré / a été effacée : on repart propre.
+    clearSession();
   }
   showScreen("screenWelcome");
 }
@@ -1824,37 +1875,24 @@ async function onCreateSubmit(e){
     }
 
     const newCoproRef = doc(collection(db, "coprovigie"));
-    await setDoc(newCoproRef, {
-      name, code, adminPass,
-      createdAt: serverTimestamp(),
-    });
+    const coproId = newCoproRef.id;
 
-    // types par défaut
+    // Crée le compte admin (Firebase Auth vérifiera le mot de passe lui-même,
+    // il n'est jamais stocké dans Firestore).
+    await createUserWithEmailAndPassword(auth, adminEmail(coproId), await derivePassword(adminPass));
+
+    await setDoc(newCoproRef, { name, code, adminDisplayName: pseudo, createdAt: serverTimestamp() });
+
     for(const t of DEFAULT_TYPES){
-      await addDoc(typesCol(newCoproRef.id), { name: t.name, icon: t.icon, createdAt: serverTimestamp() });
+      await addDoc(typesCol(coproId), { name: t.name, icon: t.icon, createdAt: serverTimestamp() });
     }
-    // un groupe par défaut
-    await addDoc(groupsCol(newCoproRef.id), { name: "Bâtiment principal", createdAt: serverTimestamp() });
+    await addDoc(groupsCol(coproId), { name: "Bâtiment principal", createdAt: serverTimestamp() });
 
-    // l'admin est aussi enregistré comme membre (pseudo unique), pour pouvoir
-    // être identifié comme auteur de ses propres signalements. Son code
-    // personnel n'est pas utilisé (l'admin se reconnecte toujours via mot
-    // de passe admin), mais le champ est rempli pour rester cohérent avec
-    // la structure attendue par les règles Firestore.
-    const memberId = generateMemberId();
-    await setDoc(doc(membersCol(newCoproRef.id), memberId), {
-      pseudo: pseudo,
-      pseudoKey: normalizePseudo(pseudo),
-      personalCode: generateMemberId(),
-      personalCodeReset: false,
-      createdAt: serverTimestamp(),
-    });
-
-    state.coproId = newCoproRef.id;
+    state.coproId = coproId;
     state.coproName = name;
     state.coproCode = code;
     state.pseudo = pseudo;
-    state.memberId = memberId;
+    state.memberId = null;
     state.isAdmin = true;
     saveSession();
 
@@ -1862,7 +1900,7 @@ async function onCreateSubmit(e){
     enterCoproSpace();
   }catch(err){
     console.error(err);
-    errEl.textContent = "Une erreur est survenue. Réessayez.";
+    errEl.textContent = fnErrorMessage(err, "Une erreur est survenue. Réessayez.");
     show(errEl);
   }finally{
     setBtnLoading(btn, false);
@@ -1913,45 +1951,40 @@ async function handleMagicLinkReturn(){
     email = prompt("Confirmez votre adresse e-mail pour terminer la connexion :");
     if(!email){ showScreen("screenWelcome"); return; }
   }
+  email = email.trim().toLowerCase();
   try{
-    await signInWithEmailLink(auth, email.trim().toLowerCase(), window.location.href);
+    await signInWithEmailLink(auth, email, window.location.href);
     localStorage.removeItem(LS_MAGIC_EMAIL);
     window.history.replaceState({}, document.title, window.location.pathname);
-    // Recherche du membre associé à cet email dans toutes les copros
-    const allCopros = await getDocs(collection(db, "coprovigie"));
-    let found = false;
-    for(const coproSnap of allCopros.docs){
-      const coproId = coproSnap.id;
-      const coproData = coproSnap.data();
-      const mQ = query(membersCol(coproId), where("email", "==", email.trim().toLowerCase()));
-      const mSnap = await getDocs(mQ);
-      if(!mSnap.empty){
-        const memberDoc = mSnap.docs[0];
-        const memberData = memberDoc.data();
-        state.coproId = coproId;
-        state.coproName = coproData.name;
-        state.coproCode = coproData.code;
-        state.pseudo = memberData.pseudo;
-        state.email = email.trim().toLowerCase();
-        state.memberId = memberDoc.id;
-        state.isAdmin = !!memberData.isAdmin;
-        saveSession();
-        toast(`Bienvenue, ${state.pseudo} !`, "success");
-        enterCoproSpace();
-        found = true;
-        break;
-      }
+
+    const idxSnap = await getDoc(emailIndexRef(email));
+    if(!idxSnap.exists()){
+      throw { code: "not-found", message: "Aucun compte trouvé pour cet e-mail. Vérifiez ou créez un compte." };
     }
-    if(!found){
-      toast("Aucun compte trouvé pour cet e-mail. Vérifiez ou créez un compte.", "error");
-      showScreen("screenJoin");
+    const { coproId, memberId } = idxSnap.data();
+    const coproSnap = await getDoc(coproRef(coproId));
+    const memberSnap = await getDoc(doc(membersCol(coproId), memberId));
+    if(!coproSnap.exists() || !memberSnap.exists()){
+      throw { code: "not-found", message: "Ce compte n'existe plus." };
     }
+    const coproData = coproSnap.data();
+    const memberData = memberSnap.data();
+
+    state.coproId = coproId;
+    state.coproName = coproData.name;
+    state.coproCode = coproData.code;
+    state.pseudo = memberData.pseudo;
+    state.email = email;
+    state.memberId = memberId;
+    state.isAdmin = false;
+    saveSession();
+    toast(`Bienvenue, ${state.pseudo} !`, "success");
+    enterCoproSpace();
   }catch(err){
     console.error(err);
-    toast("Lien invalide ou expiré. Demandez un nouveau lien.", "error");
-    showScreen("screenMagicLink");
-  }finally{
     await signOut(auth).catch(() => {});
+    toast(fnErrorMessage(err, "Lien invalide ou expiré. Demandez un nouveau lien."), "error");
+    showScreen("screenMagicLink");
   }
 }
 
@@ -1979,37 +2012,29 @@ async function onLoginSubmit(e){
       errEl.textContent = "Code d'accès introuvable. Vérifiez auprès de votre syndic.";
       show(errEl); return;
     }
-    const docSnap = snap.docs[0];
-    const coproId = docSnap.id;
-    const data = docSnap.data();
+    const coproDoc = snap.docs[0];
+    const coproId = coproDoc.id;
+    const coproData = coproDoc.data();
     const pseudoKey = normalizePseudo(pseudo);
 
-    const mQ = query(membersCol(coproId), where("pseudoKey", "==", pseudoKey));
-    const mSnap = await getDocs(mQ);
-    if(mSnap.empty){
+    const idxSnap = await getDoc(pseudoIndexRef(coproId, pseudoKey));
+    if(!idxSnap.exists()){
       errEl.textContent = "Pseudo introuvable dans cette copropriété. Vérifiez l'orthographe ou créez un compte.";
       show(errEl); return;
     }
-    const memberDoc = mSnap.docs[0];
-    const memberData = memberDoc.data();
+    const memberId = idxSnap.data().memberId;
 
-    if(memberData.personalCodeReset === true){
-      // Réinitialisation demandée par l'admin : on accepte le nouveau code
-      await updateDoc(doc(membersCol(coproId), memberDoc.id), {
-        personalCode: personalCode,
-        personalCodeReset: false,
-      });
-    } else if(memberData.personalCode !== personalCode){
-      errEl.textContent = "Code personnel incorrect.";
-      show(errEl); return;
-    }
+    await signInWithEmailAndPassword(auth, memberEmail(coproId, memberId), await derivePassword(personalCode));
+
+    const memberSnap = await getDoc(doc(membersCol(coproId), memberId));
+    const memberData = memberSnap.data();
 
     state.coproId = coproId;
-    state.coproName = data.name;
-    state.coproCode = data.code;
+    state.coproName = coproData.name;
+    state.coproCode = coproData.code;
     state.pseudo = memberData.pseudo;
     state.email = memberData.email || null;
-    state.memberId = memberDoc.id;
+    state.memberId = memberId;
     state.defaultGroupId = memberData.defaultGroupId || null;
     state.isAdmin = false;
     saveSession();
@@ -2017,7 +2042,7 @@ async function onLoginSubmit(e){
     enterCoproSpace();
   }catch(err){
     console.error(err);
-    errEl.textContent = "Une erreur est survenue. Réessayez.";
+    errEl.textContent = fnErrorMessage(err, "Code personnel incorrect.");
     show(errEl);
   }finally{
     setBtnLoading(btn, false);
@@ -2049,33 +2074,31 @@ async function onRegisterSubmit(e){
       errEl.textContent = "Code d'accès introuvable. Vérifiez auprès de votre syndic.";
       show(errEl); return;
     }
-    const docSnap = snap.docs[0];
-    const coproId = docSnap.id;
-    const data = docSnap.data();
+    const coproDoc = snap.docs[0];
+    const coproId = coproDoc.id;
+    const coproData = coproDoc.data();
     const pseudoKey = normalizePseudo(pseudo);
 
-    // Vérifie que le pseudo n'est pas déjà pris
-    const mQ = query(membersCol(coproId), where("pseudoKey", "==", pseudoKey));
-    const mSnap = await getDocs(mQ);
-    if(!mSnap.empty){
+    const idxSnap = await getDoc(pseudoIndexRef(coproId, pseudoKey));
+    if(idxSnap.exists()){
       errEl.textContent = `Le pseudo "${pseudo}" est déjà utilisé dans cette copropriété. Choisissez-en un autre, ou connectez-vous si c'est votre compte.`;
       show(errEl); return;
     }
 
-    // Création du compte
     const memberId = generateMemberId();
+    await createUserWithEmailAndPassword(auth, memberEmail(coproId, memberId), await derivePassword(personalCode));
+
     await setDoc(doc(membersCol(coproId), memberId), {
-      pseudo,
-      pseudoKey,
-      personalCode,
-      personalCodeReset: false,
-      email: email || null,
-      createdAt: serverTimestamp(),
+      pseudo, pseudoKey, email: email || null, createdAt: serverTimestamp(),
     });
+    await setDoc(pseudoIndexRef(coproId, pseudoKey), { memberId });
+    if(email){
+      await setDoc(emailIndexRef(email), { coproId, memberId });
+    }
 
     state.coproId = coproId;
-    state.coproName = data.name;
-    state.coproCode = data.code;
+    state.coproName = coproData.name;
+    state.coproCode = coproData.code;
     state.pseudo = pseudo;
     state.email = email;
     state.memberId = memberId;
@@ -2085,7 +2108,7 @@ async function onRegisterSubmit(e){
     enterCoproSpace();
   }catch(err){
     console.error(err);
-    errEl.textContent = "Une erreur est survenue. Réessayez.";
+    errEl.textContent = fnErrorMessage(err, "Une erreur est survenue. Réessayez.");
     show(errEl);
   }finally{
     setBtnLoading(btn, false);
@@ -2115,18 +2138,16 @@ async function onAdminLoginSubmit(e){
       return;
     }
     const docSnap = snap.docs[0];
+    const coproId = docSnap.id;
     const data = docSnap.data();
-    if(data.adminPass !== pass){
-      errEl.textContent = "Mot de passe administrateur incorrect.";
-      show(errEl);
-      setBtnLoading(btn, false);
-      return;
-    }
 
-    state.coproId = docSnap.id;
+    await signInWithEmailAndPassword(auth, adminEmail(coproId), await derivePassword(pass));
+
+    state.coproId = coproId;
     state.coproName = data.name;
     state.coproCode = data.code;
-    state.pseudo = "Administrateur";
+    state.pseudo = data.adminDisplayName || "Administrateur";
+    state.memberId = null;
     state.isAdmin = true;
     saveSession();
 
@@ -2134,7 +2155,7 @@ async function onAdminLoginSubmit(e){
     enterCoproSpace();
   }catch(err){
     console.error(err);
-    errEl.textContent = "Une erreur est survenue. Réessayez.";
+    errEl.textContent = fnErrorMessage(err, "Mot de passe administrateur incorrect.");
     show(errEl);
   }finally{
     setBtnLoading(btn, false);
@@ -2218,15 +2239,19 @@ async function onChangePseudo(e){
   setBtnLoading(btn, true);
   try{
     const newKey = normalizePseudo(newPseudo);
-    // Vérifier l'unicité du nouveau pseudo
-    const mQ = query(membersCol(state.coproId), where("pseudoKey", "==", newKey));
-    const mSnap = await getDocs(mQ);
-    if(!mSnap.empty && mSnap.docs[0].id !== state.memberId){
+    const oldKey = normalizePseudo(state.pseudo);
+    // Vérifier l'unicité du nouveau pseudo via l'index
+    const idxSnap = await getDoc(pseudoIndexRef(state.coproId, newKey));
+    if(idxSnap.exists() && idxSnap.data().memberId !== state.memberId){
       errEl.textContent = `Le pseudo "${newPseudo}" est déjà utilisé.`; show(errEl); return;
     }
     await updateDoc(doc(membersCol(state.coproId), state.memberId), {
       pseudo: newPseudo, pseudoKey: newKey,
     });
+    if(newKey !== oldKey){
+      await setDoc(pseudoIndexRef(state.coproId, newKey), { memberId: state.memberId });
+      await deleteDoc(pseudoIndexRef(state.coproId, oldKey)).catch(() => {});
+    }
     state.pseudo = newPseudo;
     $("topbarUser").textContent = newPseudo;
     saveSession();
@@ -2245,7 +2270,14 @@ async function onChangeEmail(e){
   const btn = e.target.querySelector("button[type=submit]");
   setBtnLoading(btn, true);
   try{
+    const oldEmail = state.email;
     await updateDoc(doc(membersCol(state.coproId), state.memberId), { email: newEmail });
+    if(oldEmail && oldEmail !== newEmail){
+      await deleteDoc(emailIndexRef(oldEmail)).catch(() => {});
+    }
+    if(newEmail){
+      await setDoc(emailIndexRef(newEmail), { coproId: state.coproId, memberId: state.memberId });
+    }
     state.email = newEmail;
     saveSession();
     toast(newEmail ? "E-mail mis à jour ✓" : "E-mail supprimé", "success");
@@ -2264,12 +2296,12 @@ async function onChangeCode(e){
   const btn = e.target.querySelector("button[type=submit]");
   setBtnLoading(btn, true);
   try{
-    await updateDoc(doc(membersCol(state.coproId), state.memberId), { personalCode: newCode, personalCodeReset: false });
+    await updatePassword(auth.currentUser, await derivePassword(newCode));
     $("newPersonalCode").value = "";
     toast("Code personnel mis à jour ✓", "success");
   }catch(err){
     console.error(err);
-    toast("Erreur lors de la mise à jour du code.", "error");
+    toast(fnErrorMessage(err, "Erreur lors de la mise à jour du code."), "error");
   }finally{
     setBtnLoading(btn, false);
   }
@@ -2281,6 +2313,7 @@ function logout(){
   if(state.unsubTypes) state.unsubTypes();
   if(state.unsubMembers) state.unsubMembers();
   clearSession();
+  signOut(auth).catch(() => {});
   state = { ...state, coproId:null, coproName:null, coproCode:null, pseudo:null, memberId:null, isAdmin:false, groups:[], types:[], reports:[], members:[] };
   hide($("topbar"));
   hide($("btnAdminToggle"));
@@ -3228,40 +3261,35 @@ function renderMembersAdminList(){
   state.members.forEach(m => {
     const li = document.createElement("li");
     li.className = "manage-item";
-    const resetPending = m.personalCodeReset === true;
-
-    // Protection : le compte admin (identifié par memberId ou pseudo normalisé)
-    // ne peut pas être supprimé depuis le panneau admin — cela bloquerait
-    // définitivement l'accès à l'administration de la copropriété.
-    const isAdminAccount = (state.memberId && m.id === state.memberId)
-                        || normalizePseudo(m.pseudo) === normalizePseudo(state.pseudo);
 
     li.innerHTML = `
-      <span class="mi-ic">${isAdminAccount ? "👑" : "👤"}</span>
-      <span class="mi-name">${escapeHtml(m.pseudo)}${isAdminAccount ? ' <span class="status-badge status-in_progress" style="margin-left:6px;background:var(--warn-tint);color:var(--warn);">Admin</span>' : ""}${resetPending ? ' <span class="status-badge status-in_progress" style="margin-left:6px;">Réinit. en attente</span>' : ""}</span>
-      ${!isAdminAccount ? `<button class="mi-reset btn-ghost btn-small" data-id="${m.id}" data-pseudo="${escapeHtml(m.pseudo)}" ${resetPending ? "disabled" : ""} style="color:var(--warn);font-size:12px;">Réinitialiser</button>` : ""}
-      ${!isAdminAccount ? `<button class="mi-del" data-id="${m.id}" data-pseudo="${escapeHtml(m.pseudo)}">Supprimer</button>` : `<span style="font-size:12px;color:var(--meta);padding:4px 8px;">Protégé</span>`}
+      <span class="mi-ic">👤</span>
+      <span class="mi-name">${escapeHtml(m.pseudo)}</span>
+      <button class="mi-reset btn-ghost btn-small" data-id="${m.id}" data-pseudo="${escapeHtml(m.pseudo)}" style="color:var(--warn);font-size:12px;">Réinitialiser le code</button>
+      <button class="mi-del" data-id="${m.id}" data-pseudo="${escapeHtml(m.pseudo)}">Supprimer</button>
     `;
-    if(!isAdminAccount){
-      if(!resetPending){
-        li.querySelector(".mi-reset").addEventListener("click", async (e) => {
-          const pseudo = e.currentTarget.dataset.pseudo;
-          if(!confirm(`Réinitialiser le code personnel de "${pseudo}" ? Il pourra en choisir un nouveau à sa prochaine connexion.`)) return;
-          try{
-            await updateDoc(doc(membersCol(state.coproId), m.id), { personalCodeReset: true });
-            toast("Code personnel réinitialisé", "success");
-          }catch(err){ console.error(err); toast("Erreur", "error"); }
-        });
-      }
-      li.querySelector(".mi-del").addEventListener("click", async (e) => {
-        const pseudo = e.currentTarget.dataset.pseudo;
-        if(!confirm(`Supprimer définitivement le compte de "${pseudo}" ? Ses signalements existants seront conservés.`)) return;
-        try{
-          await deleteDoc(doc(membersCol(state.coproId), m.id));
-          toast(`Compte de "${pseudo}" supprimé`, "success");
-        }catch(err){ console.error(err); toast("Erreur lors de la suppression", "error"); }
-      });
-    }
+    const resetAndDelete = async (pseudo, memberId, msg) => {
+      if(!confirm(msg)) return;
+      try{
+        const mSnap = await getDoc(doc(membersCol(state.coproId), memberId));
+        const mData = mSnap.exists() ? mSnap.data() : {};
+        await deleteDoc(pseudoIndexRef(state.coproId, normalizePseudo(pseudo)));
+        if(mData.email) await deleteDoc(emailIndexRef(mData.email)).catch(() => {});
+        await deleteDoc(doc(membersCol(state.coproId), memberId));
+        toast(`Compte de "${pseudo}" supprimé`, "success");
+        renderMembersAdminList();
+      }catch(err){ console.error(err); toast("Erreur lors de la suppression", "error"); }
+    };
+    li.querySelector(".mi-reset").addEventListener("click", (e) => {
+      const { id, pseudo } = e.currentTarget.dataset;
+      resetAndDelete(pseudo, id,
+        `Réinitialiser le code de "${pseudo}" ? Sans accès serveur, la seule façon de "réinitialiser" un code oublié est de supprimer ce compte : ${pseudo} devra recréer un compte avec le même pseudo et un nouveau code (son historique de signalements est conservé).`);
+    });
+    li.querySelector(".mi-del").addEventListener("click", (e) => {
+      const { id, pseudo } = e.currentTarget.dataset;
+      resetAndDelete(pseudo, id,
+        `Supprimer définitivement le compte de "${pseudo}" ? Ses signalements existants seront conservés.`);
+    });
     ul.appendChild(li);
   });
 }
@@ -3281,7 +3309,11 @@ async function onDeleteMyAccount(){
   );
   if(!confirmed) return;
   try{
+    const pseudoKey = normalizePseudo(state.pseudo);
+    await deleteDoc(pseudoIndexRef(state.coproId, pseudoKey)).catch(() => {});
+    if(state.email) await deleteDoc(emailIndexRef(state.email)).catch(() => {});
     await deleteDoc(doc(membersCol(state.coproId), state.memberId));
+    await deleteUser(auth.currentUser).catch(() => {});
     toast("Compte supprimé. Au revoir !", "success");
     logout();
   }catch(err){
@@ -3317,12 +3349,11 @@ async function onDeleteCopro(){
   if(btn){ btn.disabled = true; btn.textContent = "Suppression en cours…"; }
 
   try{
-    // Suppression en cascade des sous-collections puis du document copro
-    // Note : Firestore ne supprime pas automatiquement les sous-collections
-    // quand on supprime un document parent — on doit le faire manuellement.
+    // Suppression manuelle en cascade — le plan gratuit Firestore n'a pas
+    // d'équivalent client à "recursiveDelete" (réservé à l'Admin SDK).
     const coproId = state.coproId;
 
-    // 1. Lire et supprimer tous les reports + leur historique
+    // 1. Reports + historique
     const reportsSnap = await getDocs(reportsCol(coproId));
     for(const reportDoc of reportsSnap.docs){
       const histSnap = await getDocs(historyCol(coproId, reportDoc.id));
@@ -3330,21 +3361,32 @@ async function onDeleteCopro(){
       await deleteDoc(reportDoc.ref);
     }
 
-    // 2. Supprimer les autres sous-collections (groups, types, members)
-    const collectionsToDelete = [groupsCol(coproId), typesCol(coproId), membersCol(coproId)];
-    for(const col of collectionsToDelete){
+    // 2. Membres + leurs index (pseudo + email)
+    const membersSnap = await getDocs(membersCol(coproId));
+    for(const mDoc of membersSnap.docs){
+      const mData = mDoc.data();
+      await deleteDoc(pseudoIndexRef(coproId, mData.pseudoKey)).catch(() => {});
+      if(mData.email) await deleteDoc(emailIndexRef(mData.email)).catch(() => {});
+      await deleteDoc(mDoc.ref);
+    }
+
+    // 3. Groupes et types
+    for(const col of [groupsCol(coproId), typesCol(coproId)]){
       const snap = await getDocs(col);
       for(const d of snap.docs) await deleteDoc(d.ref);
     }
 
-    // 3. Supprimer le document copropriété lui-même
+    // 4. Le document copropriété lui-même
     await deleteDoc(coproRef(coproId));
+
+    // 5. Le compte Firebase Auth de l'admin
+    await deleteUser(auth.currentUser).catch(() => {});
 
     toast(`"${coproName}" supprimée.`, "success");
     logout();
   }catch(err){
     console.error(err);
-    toast("Erreur lors de la suppression. Réessayez.", "error");
+    toast(fnErrorMessage(err, "Erreur lors de la suppression. Réessayez."), "error");
     if(btn){ btn.disabled = false; btn.textContent = "Supprimer toute la copropriété"; }
   }
 }
@@ -3411,12 +3453,12 @@ async function onSettingsPass(e){
     return;
   }
   try{
-    await updateDoc(coproRef(state.coproId), { adminPass: pass });
+    await updatePassword(auth.currentUser, await derivePassword(pass));
     $("settingsPass").value = "";
     toast("Mot de passe administrateur mis à jour", "success");
   }catch(err){
     console.error(err);
-    toast("Erreur", "error");
+    toast(fnErrorMessage(err, "Erreur"), "error");
   }
 }
 </script>
