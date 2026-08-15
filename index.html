@@ -953,9 +953,9 @@ h1,h2,h3{ margin:0; }
         <span class="field-hint">Notez-le : il vous servira à vous reconnecter depuis un autre appareil.</span>
       </label>
       <label class="field">
-        <span class="field-label">Adresse e-mail <span class="field-optional">— optionnel</span></span>
-        <input id="registerEmail" type="email" autocomplete="email" placeholder="votre@email.fr" class="input" maxlength="120">
-        <span class="field-hint">Recommandé : permet de recevoir un lien de reconnexion si vous oubliez votre code. Non partagée.</span>
+        <span class="field-label">Adresse e-mail</span>
+        <input id="registerEmail" type="email" autocomplete="email" placeholder="votre@email.fr" required class="input" maxlength="120">
+        <span class="field-hint">Nécessaire pour recevoir un lien de reconnexion si vous oubliez votre code. Non partagée.</span>
       </label>
       <p id="registerError" class="form-error" hidden></p>
       <button type="submit" class="btn-primary btn-large btn-full">
@@ -1284,7 +1284,7 @@ h1,h2,h3{ margin:0; }
     <form id="formChangeEmail" class="inline-form" style="margin-top:14px;">
       <label class="field" style="flex:1;">
         <span class="field-label">Changer mon e-mail</span>
-        <input id="newEmail" type="email" class="input" maxlength="120" placeholder="nouvelle@adresse.fr" autocomplete="email">
+        <input id="newEmail" type="email" class="input" maxlength="120" placeholder="nouvelle@adresse.fr" autocomplete="email" required>
       </label>
       <button type="submit" class="btn-outline" style="align-self:flex-end;">Changer</button>
     </form>
@@ -1507,7 +1507,7 @@ let state = {
   coproCode: null,
   groupId: null,    // sous-groupe sélectionné pour signaler
   pseudo: null,
-  email: null,        // email optionnel pour le lien magique de reconnexion
+  email: null,        // e-mail du résident (obligatoire depuis l'inscription ; sert au lien magique de reconnexion)
   memberId: null,
   defaultGroupId: null, // bâtiment préféré de l'utilisateur (pré-sélectionné à la création d'un signalement)   // identifiant unique de résident (preuve d'auteur, anti-usurpation)
   isAdmin: false,
@@ -1914,6 +1914,13 @@ function normalizePseudo(pseudo){
   return (pseudo || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+// Adresse e-mail désormais obligatoire (compte résident) : validation
+// basique côté client (le champ HTML type="email" filtre déjà une bonne
+// partie des cas, ceci est une double sécurité avant écriture Firestore).
+function isValidEmail(email){
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || "");
+}
+
 // =========================================================
 // LIEN MAGIQUE (Firebase Auth passwordless email link)
 // =========================================================
@@ -2061,9 +2068,13 @@ async function onRegisterSubmit(e){
   const code = normalizeCode($("registerCode").value);
   const pseudo = $("registerPseudo").value.trim();
   const personalCode = $("registerPersonalCode").value.trim();
-  const email = $("registerEmail").value.trim().toLowerCase() || null;
-  if(!code || !pseudo || personalCode.length < 4){
-    errEl.textContent = "Merci de renseigner le code d'accès, un pseudo et un code personnel (4 caractères min.).";
+  const email = $("registerEmail").value.trim().toLowerCase();
+  if(!code || !pseudo || personalCode.length < 4 || !email){
+    errEl.textContent = "Merci de renseigner le code d'accès, un pseudo, un code personnel (4 caractères min.) et une adresse e-mail.";
+    show(errEl); return;
+  }
+  if(!isValidEmail(email)){
+    errEl.textContent = "Adresse e-mail invalide.";
     show(errEl); return;
   }
   setBtnLoading(btn, true);
@@ -2089,7 +2100,7 @@ async function onRegisterSubmit(e){
     await createUserWithEmailAndPassword(auth, memberEmail(coproId, memberId), await derivePassword(personalCode));
 
     await setDoc(doc(membersCol(coproId), memberId), {
-      pseudo, pseudoKey, email: email || null, createdAt: serverTimestamp(),
+      pseudo, pseudoKey, email, createdAt: serverTimestamp(),
     });
     await setDoc(pseudoIndexRef(coproId, pseudoKey), { memberId });
     if(email){
@@ -2266,8 +2277,12 @@ async function onChangePseudo(e){
 
 async function onChangeEmail(e){
   e.preventDefault();
-  const newEmail = $("newEmail").value.trim().toLowerCase() || null;
+  const newEmail = $("newEmail").value.trim().toLowerCase();
   const btn = e.target.querySelector("button[type=submit]");
+  if(!newEmail || !isValidEmail(newEmail)){
+    toast("Adresse e-mail invalide.", "error");
+    return;
+  }
   setBtnLoading(btn, true);
   try{
     const oldEmail = state.email;
@@ -2275,12 +2290,10 @@ async function onChangeEmail(e){
     if(oldEmail && oldEmail !== newEmail){
       await deleteDoc(emailIndexRef(oldEmail)).catch(() => {});
     }
-    if(newEmail){
-      await setDoc(emailIndexRef(newEmail), { coproId: state.coproId, memberId: state.memberId });
-    }
+    await setDoc(emailIndexRef(newEmail), { coproId: state.coproId, memberId: state.memberId });
     state.email = newEmail;
     saveSession();
-    toast(newEmail ? "E-mail mis à jour ✓" : "E-mail supprimé", "success");
+    toast("E-mail mis à jour ✓", "success");
   }catch(err){
     console.error(err);
     toast("Erreur lors de la mise à jour de l'e-mail.", "error");
