@@ -1319,8 +1319,8 @@ h1,h2,h3{ margin:0; }
         <select id="reportGroupSelect" class="input select"></select>
       </label>
       <label class="field">
-        <span class="field-label">Commentaire (facultatif)</span>
-        <textarea id="reportComment" class="input textarea" rows="3" maxlength="500" placeholder="Précisez si besoin : étage, gravité, depuis quand…"></textarea>
+        <span class="field-label">Commentaire</span>
+        <textarea id="reportComment" class="input textarea" rows="3" maxlength="500" required placeholder="Précisez : étage, gravité, depuis quand…"></textarea>
       </label>
       <button type="submit" class="btn-primary btn-large btn-full">
         <span>Confirmer le signalement</span>
@@ -2706,6 +2706,11 @@ async function onReportSubmit(e){
   const groupName = reportGroupSel.options[reportGroupSel.selectedIndex]?.textContent || state.groups[0]?.name || "Non précisé";
 
   const comment = $("reportComment").value.trim();
+  if(!comment){
+    toast("Merci d'ajouter un commentaire.", "error");
+    $("reportComment").focus();
+    return;
+  }
   const photosToUpload = (state._reportPhotoHolder?.photos || []).slice();
 
   setBtnLoading(btn, true);
@@ -2717,7 +2722,7 @@ async function onReportSubmit(e){
       typeIcon: state.pendingType.icon || "❗",
       groupId: groupId,
       groupName: groupName,
-      comment: comment || "",
+      comment: comment,
       photos: photoUrls,
       author: state.pseudo,
       authorId: state.memberId || null,
@@ -3109,7 +3114,14 @@ function openEditReportModal(r){
   $("formEditReport").addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector("button[type=submit]");
-    const comment = $("editComment").value.trim();
+    const textarea = $("editComment");
+    textarea.required = true;
+    const comment = textarea.value.trim();
+    if(!comment){
+      toast("Merci d'ajouter un commentaire.", "error");
+      textarea.focus();
+      return;
+    }
     const photosToSave = editPhotoHolder.photos.slice();
     const editGroupSel = $("editGroupSelect");
     const newGroupId = editGroupSel.value || r.groupId;
