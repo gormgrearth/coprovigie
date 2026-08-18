@@ -137,6 +137,16 @@ body::before{
 [data-theme="dark"] body::before{
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Cpath d='M0 300 Q200 220 400 300 Q600 380 800 300 L800 600 L0 600Z' fill='rgba(255%2C255%2C255%2C.05)'/%3E%3Cpath d='M0 420 Q200 350 400 420 Q600 490 800 420 L800 600 L0 600Z' fill='rgba(255%2C255%2C255%2C.035)'/%3E%3C/svg%3E");
 }
+/* Teinte de fond indiquant le lieu ("groupSelect") actuellement sélectionné */
+body::after{
+  content:"";
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:var(--selected-tint, transparent);
+  opacity:0;
+  transition: opacity .35s ease, background .35s ease;
+}
+body.has-group-tint::after{ opacity:.10; }
+[data-theme="dark"] body.has-group-tint::after{ opacity:.16; }
 [data-theme="dark"] body{
   background:
     radial-gradient(1100px 700px at 6% -8%, color-mix(in srgb, var(--signal) 22%, transparent), transparent 62%),
@@ -511,6 +521,10 @@ h1,h2,h3{ margin:0; }
   text-align:left;
   width:100%;
   transition: border-color .15s ease, background .15s ease;
+}
+.report-card--new{
+  border-width:3px;
+  border-left-width:6px;
 }
 .report-card:hover{
   border-color:color-mix(in srgb, var(--group-color, var(--line)) 50%, var(--line));
@@ -1135,6 +1149,10 @@ h1,h2,h3{ margin:0; }
           <button class="chip" data-filter="in_progress">En cours</button>
           <button class="chip" data-filter="resolved">Résolus</button>
         </div>
+        <label class="old-resolved-toggle">
+          <input type="checkbox" id="showOnlyNew">
+          <span>🆕 Nouveaux / mis à jour uniquement</span>
+        </label>
         <label id="oldResolvedToggleWrap" class="old-resolved-toggle" hidden>
           <input type="checkbox" id="showOldResolved">
           <span>Afficher aussi les résolus de plus de <span id="oldResolvedDaysLabel">—</span> jours</span>
@@ -1176,6 +1194,10 @@ h1,h2,h3{ margin:0; }
         <button class="chip" data-afilter="in_progress">En cours</button>
         <button class="chip" data-afilter="resolved">Résolus</button>
       </div>
+      <label class="old-resolved-toggle">
+        <input type="checkbox" id="adminShowOnlyNew">
+        <span>🆕 Nouveaux / mis à jour uniquement</span>
+      </label>
       <label id="adminOldResolvedToggleWrap" class="old-resolved-toggle" hidden>
         <input type="checkbox" id="adminShowOldResolved">
         <span>Afficher aussi les signalements résolus de plus de <span id="adminOldResolvedDaysLabel">—</span> jours</span>
@@ -1558,6 +1580,7 @@ let state = {
   pendingPhotos: [], // fichiers photos en attente (max 3) pour la modale de signalement
   autoHideResolvedDays: 0, // 0 = désactivé. Masque les signalements résolus depuis plus de X jours.
   showOldResolved: false,  // case à cocher locale (session) pour réafficher ceux masqués
+  showOnlyNew: false,      // case à cocher locale : n'afficher que nouveaux/mis à jour
 };
 
 // Palette de couleurs proposées par défaut pour identifier rapidement
@@ -1846,6 +1869,20 @@ function bindStaticEvents(){
     renderReportsList();
     renderAdminReportsList();
   });
+
+  // Case "nouveaux / mis à jour uniquement" (synchronisée entre vue résident et admin)
+  $("showOnlyNew").addEventListener("change", (e) => {
+    state.showOnlyNew = e.target.checked;
+    $("adminShowOnlyNew").checked = state.showOnlyNew;
+    renderReportsList();
+    renderAdminReportsList();
+  });
+  $("adminShowOnlyNew").addEventListener("change", (e) => {
+    state.showOnlyNew = e.target.checked;
+    $("showOnlyNew").checked = state.showOnlyNew;
+    renderReportsList();
+    renderAdminReportsList();
+  });
   $("adminShowOldResolved").addEventListener("change", (e) => {
     state.showOldResolved = e.target.checked;
     $("showOldResolved").checked = state.showOldResolved;
@@ -1864,7 +1901,10 @@ function bindStaticEvents(){
   });
 
   // Group select changes which group new reports go to... actually it's a filter context
-  $("groupSelect").addEventListener("change", renderReportsList);
+  $("groupSelect").addEventListener("change", () => {
+    applySelectedGroupTint();
+    renderReportsList();
+  });
 
   // populate icon select
   const iconSelect = $("newTypeIcon");
@@ -2563,6 +2603,23 @@ function renderGroupSelect(){
     sel.appendChild(opt);
   });
   if(prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  applySelectedGroupTint();
+}
+
+// Applique une légère teinte de la couleur du lieu sélectionné au fond
+// de l'application, pour donner un repère visuel de la sélection active.
+function applySelectedGroupTint(){
+  const sel = $("groupSelect");
+  const groupId = sel?.value;
+  const group = groupId && groupId !== "all" ? state.groups.find(g => g.id === groupId) : null;
+  const root = document.documentElement;
+  if(group?.color){
+    root.style.setProperty("--selected-tint", group.color);
+    document.body.classList.add("has-group-tint");
+  }else{
+    document.body.classList.remove("has-group-tint");
+    root.style.removeProperty("--selected-tint");
+  }
 }
 
 // =========================================================
@@ -2863,6 +2920,40 @@ async function onReportSubmit(e){
 }
 
 // =========================================================
+// SUIVI "NOUVEAU / MIS À JOUR" (par appareil, via localStorage)
+// Un signalement jamais ouvert, ou dont la dernière mise à jour
+// (updatedAt) est postérieure à la dernière lecture, est considéré
+// "nouveau ou mis à jour" : cadre plus épais + filtre dédié.
+// =========================================================
+function reportTimeMillis(r){
+  const ts = r.updatedAt || r.createdAt;
+  if(ts?.toMillis) return ts.toMillis();
+  if(typeof ts?.seconds === "number") return ts.seconds * 1000;
+  return 0;
+}
+
+function seenReportsKey(){
+  return `coprovigie_seen_${state.coproId}`;
+}
+
+function getSeenMap(){
+  try{ return JSON.parse(localStorage.getItem(seenReportsKey()) || "{}"); }
+  catch(e){ return {}; }
+}
+
+function markReportSeen(r){
+  const map = getSeenMap();
+  map[r.id] = reportTimeMillis(r);
+  try{ localStorage.setItem(seenReportsKey(), JSON.stringify(map)); }catch(e){}
+}
+
+function isNewOrUpdated(r){
+  const seenAt = getSeenMap()[r.id];
+  if(seenAt === undefined) return true;
+  return reportTimeMillis(r) > seenAt;
+}
+
+// =========================================================
 // RENDER: LISTE DES SIGNALEMENTS (vue résident)
 // =========================================================
 // Un signalement résolu est considéré "ancien" s'il est résolu depuis
@@ -2882,6 +2973,7 @@ function filteredReports(filter, groupFilter){
     if(filter !== "all" && r.status !== filter) return false;
     if(groupFilter && groupFilter !== "all" && r.groupId !== groupFilter) return false;
     if(!state.showOldResolved && isOldResolved(r)) return false;
+    if(state.showOnlyNew && !isNewOrUpdated(r)) return false;
     return true;
   });
 }
@@ -2914,7 +3006,7 @@ function reportCardEl(r, isAdminView){
   const group = state.groups.find(g => g.id === r.groupId);
   const groupColor = group?.color || null;
   const card = document.createElement("button");
-  card.className = "report-card";
+  card.className = "report-card" + (isNewOrUpdated(r) ? " report-card--new" : "");
   if(groupColor) card.style.setProperty("--group-color", groupColor);
   card.innerHTML = `
     <div class="report-ic">${escapeHtml(r.typeIcon || "❗")}</div>
@@ -2967,6 +3059,9 @@ function openLightbox(url){
 // est réservé à son auteur ou à l'administrateur.
 // =========================================================
 function openDetailModal(r, isAdminView){
+  markReportSeen(r);
+  renderReportsList();
+  renderAdminReportsList();
   const content = $("detailContent");
   const editable = canEditReport(r);
   const statusButtons = ["reported","in_progress","resolved"].map(s => `
