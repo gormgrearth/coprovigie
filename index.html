@@ -918,8 +918,6 @@ h1,h2,h3{ margin:0; }
     <div class="welcome-actions">
       <button id="btnGoLogin" class="btn-primary btn-large btn-full">Me connecter</button>
       <button id="btnGoRegister" class="btn-outline btn-large btn-full">Créer mon compte</button>
-      <div class="divider-or"><span>ou</span></div>
-      <button id="btnMagicLink" class="btn-outline btn-large btn-full">📧 Lien de connexion par e-mail</button>
     </div>
   </section>
 
@@ -991,7 +989,7 @@ h1,h2,h3{ margin:0; }
       <label class="field">
         <span class="field-label">Adresse e-mail</span>
         <input id="registerEmail" type="email" autocomplete="email" placeholder="votre@email.fr" required class="input" maxlength="120">
-        <span class="field-hint">Nécessaire pour recevoir un lien de reconnexion si vous oubliez votre code. Non partagée.</span>
+        <span class="field-hint">Pour vous identifier et vous contacter si besoin. Non partagée.</span>
       </label>
       <p id="registerError" class="form-error" hidden></p>
       <button type="submit" class="btn-primary btn-large btn-full">
@@ -1010,40 +1008,6 @@ h1,h2,h3{ margin:0; }
     <p class="eyebrow">Code oublié</p>
     <h2 class="screen-title">Demandez une réinitialisation</h2>
     <p class="screen-sub">Contactez l'administrateur de votre copropriété (syndic, conseil syndical…) en lui indiquant votre pseudo. Il pourra réinitialiser votre code personnel depuis son espace d'administration, onglet « Résidents ». Vous pourrez alors en choisir un nouveau à la prochaine connexion.</p>
-  </section>
-
-  <!-- =====================================================
-       ECRAN 1c — LIEN MAGIQUE (saisie email)
-  ====================================================== -->
-  <section id="screenMagicLink" class="screen screen-center" hidden>
-    <button class="btn-back" data-back="screenJoin">← Retour</button>
-    <p class="eyebrow">Connexion sans mot de passe</p>
-    <h2 class="screen-title">Recevoir un lien de connexion</h2>
-    <p class="screen-sub">Entrez l'adresse e-mail associée à votre compte. Vous recevrez un lien valable 1 heure qui vous connectera automatiquement.</p>
-    <form id="formMagicLink" class="stack-form">
-      <label class="field">
-        <span class="field-label">Adresse e-mail</span>
-        <input id="magicEmail" type="email" autocomplete="email" placeholder="votre@email.fr" required class="input" maxlength="120">
-      </label>
-      <p id="magicError" class="form-error" hidden></p>
-      <button type="submit" class="btn-primary btn-large btn-full">
-        <span>Envoyer le lien</span>
-        <span class="btn-spinner" hidden></span>
-      </button>
-    </form>
-    <p class="screen-sub" style="margin-top:16px; font-size:13px;">Si vous n'avez pas renseigné d'adresse e-mail lors de votre inscription, contactez votre administrateur.</p>
-  </section>
-
-  <!-- =====================================================
-       ECRAN 1d — LIEN MAGIQUE ENVOYÉ
-  ====================================================== -->
-  <section id="screenMagicLinkSent" class="screen screen-center" hidden>
-    <div style="font-size:48px; margin-bottom:16px;">📧</div>
-    <p class="eyebrow">Vérifiez vos e-mails</p>
-    <h2 class="screen-title">Lien envoyé !</h2>
-    <p class="screen-sub">Un lien de connexion a été envoyé à <strong id="magicEmailSent"></strong>. Cliquez dessus depuis cet appareil ou un autre — vous serez connecté automatiquement.</p>
-    <p class="screen-sub" style="font-size:13px; margin-top:12px;">Le lien expire dans 1 heure. Si vous ne le recevez pas, vérifiez vos spams.</p>
-    <button class="btn-outline" onclick="showScreen('screenJoin')" style="margin-top:24px;">← Retour à la connexion</button>
   </section>
 
   <!-- =====================================================
@@ -1406,7 +1370,7 @@ h1,h2,h3{ margin:0; }
       <h3>Quelles données sont collectées ?</h3>
       <p>Lorsque vous utilisez CoproVigie, nous collectons :</p>
       <ul>
-        <li><strong>Votre adresse e-mail</strong>, pour créer votre compte et vous permettre de vous connecter (mot de passe ou lien de connexion par e-mail) ;</li>
+        <li><strong>Votre adresse e-mail</strong>, pour créer votre compte et vous identifier ;</li>
         <li><strong>Le nom affiché</strong> que vous choisissez à l'inscription, visible des autres résidents de votre copropriété ;</li>
         <li><strong>Le contenu de vos signalements</strong> : description, lieu, catégorie, et les photos que vous choisissez d'ajouter ;</li>
         <li>Des <strong>informations techniques</strong> minimales liées à la connexion (horodatage de création de compte, dernière activité).</li>
@@ -1461,8 +1425,7 @@ import {
   serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 import {
-  getAuth, sendSignInLinkToEmail, isSignInWithEmailLink,
-  signInWithEmailLink, onAuthStateChanged, signOut,
+  getAuth, onAuthStateChanged, signOut,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   updatePassword, deleteUser
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
@@ -1515,7 +1478,6 @@ async function sha256Hex(text){
 // code résident).
 const derivePassword = (secret) => sha256Hex(String(secret));
 
-const emailIndexRef  = (email) => doc(db, "emailIndex", email);
 const pseudoIndexCol = (coproId) => collection(db, "coprovigie", coproId, "pseudoIndex");
 const pseudoIndexRef = (coproId, pseudoKey) => doc(db, "coprovigie", coproId, "pseudoIndex", pseudoKey);
 
@@ -1552,7 +1514,6 @@ const STATUS_LABELS = { reported: "Signalé", in_progress: "En cours", resolved:
 // ETAT LOCAL (persisté dans localStorage)
 // ---------------------------------------------------------
 const LS_KEY = "coprovigie_session";
-const LS_MAGIC_EMAIL = "coprovigie_magic_email"; // email en attente de confirmation du lien magique
 const LS_THEME = "coprovigie_theme";
 const LS_NOTIF_ENABLED = "coprovigie_notif_enabled";
 let state = {
@@ -1561,7 +1522,7 @@ let state = {
   coproCode: null,
   groupId: null,    // sous-groupe sélectionné pour signaler
   pseudo: null,
-  email: null,        // e-mail du résident (obligatoire depuis l'inscription ; sert au lien magique de reconnexion)
+  email: null,        // e-mail du résident (obligatoire depuis l'inscription)
   memberId: null,
   defaultGroupId: null, // bâtiment préféré de l'utilisateur (pré-sélectionné à la création d'un signalement)   // identifiant unique de résident (preuve d'auteur, anti-usurpation)
   isAdmin: false,
@@ -1706,12 +1667,6 @@ async function init(){
   hide($("loader"));
   show($("app"));
 
-  // ---- Détection d'un lien magique (retour depuis l'email) ----
-  if(isSignInWithEmailLink(auth, window.location.href)){
-    await handleMagicLinkReturn();
-    return;
-  }
-
   // ---- Attend la restauration de la session Firebase Auth (les lectures
   // Firestore sont désormais protégées par l'identité du compte connecté,
   // voir firestore.rules) ----
@@ -1756,7 +1711,6 @@ function bindStaticEvents(){
   $("btnGoRegister").addEventListener("click", () => showScreen("screenRegister"));
   $("btnGoLoginFromRegister").addEventListener("click", () => showScreen("screenLogin"));
   $("btnForgotCode").addEventListener("click", () => showScreen("screenForgotCode"));
-  $("btnMagicLink").addEventListener("click", () => showScreen("screenMagicLink"));
 
   // Boutons œil : toggle visibilité des champs sensibles (codes et mots de passe)
   // État initial : tous les champs .input-code commencent masqués (type=password)
@@ -1798,7 +1752,6 @@ function bindStaticEvents(){
   $("formRegister").addEventListener("submit", onRegisterSubmit);
   $("formCreate").addEventListener("submit", onCreateSubmit);
   $("formAdminLogin").addEventListener("submit", onAdminLoginSubmit);
-  $("formMagicLink").addEventListener("submit", onMagicLinkSubmit);
   $("formReport").addEventListener("submit", onReportSubmit);
   $("formAddGroup").addEventListener("submit", onAddGroup);
   $("formAddType").addEventListener("submit", onAddType);
@@ -1995,80 +1948,6 @@ function isValidEmail(email){
 }
 
 // =========================================================
-// LIEN MAGIQUE (Firebase Auth passwordless email link)
-// =========================================================
-const MAGIC_ACTION_CODE_SETTINGS = {
-  url: window.location.href.split("?")[0].split("#")[0],
-  handleCodeInApp: true,
-};
-
-async function onMagicLinkSubmit(e){
-  e.preventDefault();
-  const btn = e.target.querySelector("button[type=submit]");
-  const email = $("magicEmail").value.trim().toLowerCase();
-  const errEl = $("magicError");
-  hide(errEl);
-  if(!email){ errEl.textContent = "Merci d'entrer une adresse e-mail."; show(errEl); return; }
-  setBtnLoading(btn, true);
-  try{
-    await sendSignInLinkToEmail(auth, email, MAGIC_ACTION_CODE_SETTINGS);
-    localStorage.setItem(LS_MAGIC_EMAIL, email);
-    $("magicEmailSent").textContent = email;
-    showScreen("screenMagicLinkSent");
-  }catch(err){
-    console.error(err);
-    errEl.textContent = "Impossible d'envoyer le lien. Vérifiez l'adresse e-mail et réessayez.";
-    show(errEl);
-  }finally{
-    setBtnLoading(btn, false);
-  }
-}
-
-async function handleMagicLinkReturn(){
-  showScreen("screenWelcome");
-  let email = localStorage.getItem(LS_MAGIC_EMAIL);
-  if(!email){
-    email = prompt("Confirmez votre adresse e-mail pour terminer la connexion :");
-    if(!email){ showScreen("screenWelcome"); return; }
-  }
-  email = email.trim().toLowerCase();
-  try{
-    await signInWithEmailLink(auth, email, window.location.href);
-    localStorage.removeItem(LS_MAGIC_EMAIL);
-    window.history.replaceState({}, document.title, window.location.pathname);
-
-    const idxSnap = await getDoc(emailIndexRef(email));
-    if(!idxSnap.exists()){
-      throw { code: "not-found", message: "Aucun compte trouvé pour cet e-mail. Vérifiez ou créez un compte." };
-    }
-    const { coproId, memberId } = idxSnap.data();
-    const coproSnap = await getDoc(coproRef(coproId));
-    const memberSnap = await getDoc(doc(membersCol(coproId), memberId));
-    if(!coproSnap.exists() || !memberSnap.exists()){
-      throw { code: "not-found", message: "Ce compte n'existe plus." };
-    }
-    const coproData = coproSnap.data();
-    const memberData = memberSnap.data();
-
-    state.coproId = coproId;
-    state.coproName = coproData.name;
-    state.coproCode = coproData.code;
-    state.pseudo = memberData.pseudo;
-    state.email = email;
-    state.memberId = memberId;
-    state.isAdmin = false;
-    saveSession();
-    toast(`Bienvenue, ${state.pseudo} !`, "success");
-    enterCoproSpace();
-  }catch(err){
-    console.error(err);
-    await signOut(auth).catch(() => {});
-    toast(fnErrorMessage(err, "Lien invalide ou expiré. Demandez un nouveau lien."), "error");
-    showScreen("screenMagicLink");
-  }
-}
-
-// =========================================================
 // CONNEXION RÉSIDENT (compte existant)
 // =========================================================
 async function onLoginSubmit(e){
@@ -2176,9 +2055,6 @@ async function onRegisterSubmit(e){
       pseudo, pseudoKey, email, createdAt: serverTimestamp(),
     });
     await setDoc(pseudoIndexRef(coproId, pseudoKey), { memberId });
-    if(email){
-      await setDoc(emailIndexRef(email), { coproId, memberId });
-    }
 
     state.coproId = coproId;
     state.coproName = coproData.name;
@@ -2433,12 +2309,7 @@ async function onChangeEmail(e){
   }
   setBtnLoading(btn, true);
   try{
-    const oldEmail = state.email;
     await updateDoc(doc(membersCol(state.coproId), state.memberId), { email: newEmail });
-    if(oldEmail && oldEmail !== newEmail){
-      await deleteDoc(emailIndexRef(oldEmail)).catch(() => {});
-    }
-    await setDoc(emailIndexRef(newEmail), { coproId: state.coproId, memberId: state.memberId });
     state.email = newEmail;
     saveSession();
     toast("E-mail mis à jour ✓", "success");
@@ -3511,10 +3382,7 @@ function renderMembersAdminList(){
     const resetAndDelete = async (pseudo, memberId, msg) => {
       if(!confirm(msg)) return;
       try{
-        const mSnap = await getDoc(doc(membersCol(state.coproId), memberId));
-        const mData = mSnap.exists() ? mSnap.data() : {};
         await deleteDoc(pseudoIndexRef(state.coproId, normalizePseudo(pseudo)));
-        if(mData.email) await deleteDoc(emailIndexRef(mData.email)).catch(() => {});
         await deleteDoc(doc(membersCol(state.coproId), memberId));
         toast(`Compte de "${pseudo}" supprimé`, "success");
         renderMembersAdminList();
@@ -3551,7 +3419,6 @@ async function onDeleteMyAccount(){
   try{
     const pseudoKey = normalizePseudo(state.pseudo);
     await deleteDoc(pseudoIndexRef(state.coproId, pseudoKey)).catch(() => {});
-    if(state.email) await deleteDoc(emailIndexRef(state.email)).catch(() => {});
     await deleteDoc(doc(membersCol(state.coproId), state.memberId));
     await deleteUser(auth.currentUser).catch(() => {});
     toast("Compte supprimé. Au revoir !", "success");
@@ -3601,12 +3468,11 @@ async function onDeleteCopro(){
       await deleteDoc(reportDoc.ref);
     }
 
-    // 2. Membres + leurs index (pseudo + email)
+    // 2. Membres + leur index pseudo
     const membersSnap = await getDocs(membersCol(coproId));
     for(const mDoc of membersSnap.docs){
       const mData = mDoc.data();
       await deleteDoc(pseudoIndexRef(coproId, mData.pseudoKey)).catch(() => {});
-      if(mData.email) await deleteDoc(emailIndexRef(mData.email)).catch(() => {});
       await deleteDoc(mDoc.ref);
     }
 
