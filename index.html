@@ -14,6 +14,17 @@
 <link rel="shortcut icon" href="favicon.ico">
 <link rel="apple-touch-icon" href="favicon-192.png">
 
+<!-- Partage de lien (WhatsApp, SMS, Messages, réseaux sociaux…) -->
+<meta property="og:title" content="CoproVigie">
+<meta property="og:description" content="Signalez en quelques clics une anomalie dans votre copropriété.">
+<meta property="og:image" content="https://gormgrearth.github.io/coprovigie/favicon-192.png">
+<meta property="og:url" content="https://gormgrearth.github.io/coprovigie/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="CoproVigie">
+<meta name="twitter:description" content="Signalez en quelques clics une anomalie dans votre copropriété.">
+<meta name="twitter:image" content="https://gormgrearth.github.io/coprovigie/favicon-192.png">
+
 <!-- PWA / raccourci écran d'accueil -->
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -178,7 +189,7 @@ h1,h2,h3{ margin:0; }
   border-bottom:1px solid var(--line-soft);
 }
 .topbar-left{ display:flex; align-items:center; gap:8px; min-width:0; flex:1; }
-.topbar-mark{ color:var(--signal); font-size:18px; line-height:1; flex-shrink:0; }
+.topbar-mark{ width:22px; height:22px; flex-shrink:0; display:block; }
 .topbar-id{ display:flex; flex-direction:column; min-width:0; }
 .topbar-id strong{
   font-family:var(--display); font-weight:700; font-size:14px;
@@ -280,7 +291,8 @@ h1,h2,h3{ margin:0; }
   letter-spacing:-.01em; color:var(--ink); margin-bottom:14px;
 }
 .hero-title span{ color:var(--signal); }
-.welcome-mark{ color:var(--ink); margin-bottom:18px; }
+.welcome-mark{ margin-bottom:18px; display:flex; justify-content:center; }
+.welcome-mark img{ display:block; }
 .welcome-sub{
   max-width:440px; color:var(--ink-soft); font-size:16px; margin-bottom:34px;
 }
@@ -834,7 +846,7 @@ h1,h2,h3{ margin:0; }
   <!-- ---------- TOPBAR (visible une fois connecté) ---------- -->
   <header id="topbar" class="topbar" hidden>
     <div class="topbar-left">
-      <span class="topbar-mark">◆</span>
+      <img src="favicon.svg" alt="" class="topbar-mark" width="22" height="22">
       <div class="topbar-id">
         <strong id="topbarCopro">—</strong>
         <span id="topbarGroup">—</span>
@@ -853,10 +865,7 @@ h1,h2,h3{ margin:0; }
   ====================================================== -->
   <section id="screenWelcome" class="screen screen-center">
     <div class="welcome-mark">
-      <svg width="64" height="64" viewBox="0 0 56 56" fill="none">
-        <rect x="2" y="2" width="52" height="52" rx="10" stroke="currentColor" stroke-width="3"/>
-        <path d="M28 16v16M28 40v.1" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-      </svg>
+      <img src="favicon.svg" alt="CoproVigie" width="64" height="64">
     </div>
     <p class="eyebrow">Carnet de bord d'immeuble</p>
     <h1 class="hero-title">Copro<span>Vigie</span></h1>
