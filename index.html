@@ -1256,6 +1256,15 @@ h1,h2,h3{ margin:0; }
       <span class="field-hint">Pré-sélectionné à chaque nouveau signalement.</span>
     </div>
 
+    <!-- Notifications -->
+    <div class="field" style="margin-bottom:18px;">
+      <span class="field-label">Notifications</span>
+      <div class="theme-toggle-row">
+        <button type="button" class="theme-btn" id="btnNotifToggle">🔔 Activer les notifications</button>
+      </div>
+      <span class="field-hint" id="notifStatusHint">Vous alerte quand un signalement est ajouté ou modifié, tant que l'app reste ouverte dans le navigateur (elle peut être en arrière-plan). Ne fonctionne pas app totalement fermée.</span>
+    </div>
+
     <!-- Thème -->
     <div class="field" style="margin-bottom:18px;">
       <span class="field-label">Thème d'affichage</span>
@@ -1501,6 +1510,7 @@ const STATUS_LABELS = { reported: "Signalé", in_progress: "En cours", resolved:
 const LS_KEY = "coprovigie_session";
 const LS_MAGIC_EMAIL = "coprovigie_magic_email"; // email en attente de confirmation du lien magique
 const LS_THEME = "coprovigie_theme";
+const LS_NOTIF_ENABLED = "coprovigie_notif_enabled";
 let state = {
   coproId: null,
   coproName: null,
@@ -1757,6 +1767,7 @@ function bindStaticEvents(){
   $("userPrefsModalClose").addEventListener("click", () => hide($("userPrefsModal")));
   $("userPrefsModal").addEventListener("click", e => { if(e.target.id === "userPrefsModal") hide($("userPrefsModal")); });
   $("btnSaveUserPrefs").addEventListener("click", saveUserPrefs);
+  $("btnNotifToggle").addEventListener("click", toggleNotifications);
   $("btnDeleteMyAccount").addEventListener("click", onDeleteMyAccount);
   $("formChangePseudo").addEventListener("submit", onChangePseudo);
   $("formChangeEmail").addEventListener("submit", onChangeEmail);
@@ -2203,8 +2214,82 @@ window.matchMedia("(prefers-color-scheme:dark)").addEventListener("change", () =
 });
 
 // =========================================================
-// PRÉFÉRENCES UTILISATEUR
+// NOTIFICATIONS NAVIGATEUR (app ouverte, onglet actif ou en fond)
 // =========================================================
+function notifSupported(){
+  return "Notification" in window;
+}
+
+function notifEnabled(){
+  return notifSupported()
+      && Notification.permission === "granted"
+      && localStorage.getItem(LS_NOTIF_ENABLED) === "1";
+}
+
+async function toggleNotifications(){
+  if(!notifSupported()){
+    toast("Votre navigateur ne supporte pas les notifications.", "error");
+    return;
+  }
+  if(notifEnabled()){
+    localStorage.setItem(LS_NOTIF_ENABLED, "0");
+    updateNotifButtonUI();
+    toast("Notifications désactivées", "success");
+    return;
+  }
+  if(Notification.permission === "denied"){
+    toast("Notifications bloquées : autorisez-les dans les réglages du navigateur/site.", "error");
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if(perm === "granted"){
+    localStorage.setItem(LS_NOTIF_ENABLED, "1");
+    toast("Notifications activées ✓", "success");
+  }else{
+    localStorage.setItem(LS_NOTIF_ENABLED, "0");
+    toast("Notifications refusées", "error");
+  }
+  updateNotifButtonUI();
+}
+
+function updateNotifButtonUI(){
+  const btn = $("btnNotifToggle");
+  const hint = $("notifStatusHint");
+  if(!btn) return;
+  if(!notifSupported()){
+    btn.textContent = "🔕 Non supporté par ce navigateur";
+    btn.disabled = true;
+    return;
+  }
+  const on = notifEnabled();
+  btn.classList.toggle("active", on);
+  btn.textContent = on ? "🔔 Notifications activées" : "🔕 Activer les notifications";
+  if(hint){
+    hint.textContent = Notification.permission === "denied"
+      ? "Bloquées par le navigateur. Autorisez les notifications pour ce site dans ses réglages, puis réessayez."
+      : "Vous alerte quand un signalement est ajouté ou modifié, tant que l'app reste ouverte dans le navigateur (elle peut être en arrière-plan). Ne fonctionne pas app totalement fermée.";
+  }
+}
+
+function notifyReportEvent(type, r){
+  if(!notifEnabled()) return;
+  const isNew = type === "added";
+  const title = isNew ? "Nouveau signalement" : "Signalement modifié";
+  const statusLabel = STATUS_LABELS[r.status] || r.status || "";
+  const body = `${r.typeName || "Incident"} · ${r.groupName || "Non précisé"}${isNew ? (r.author ? ` · par ${r.author}` : "") : ` · ${statusLabel}`}`;
+  try{
+    const n = new Notification(title, {
+      body,
+      icon: "favicon-192.png",
+      tag: "report-" + r.id, // évite d'empiler plusieurs notifs pour le même signalement
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+  }catch(e){
+    console.error("notification error", e);
+  }
+}
+
+
 function openUserPrefsModal(){
   // Select bâtiment
   const sel = $("prefDefaultGroup");
@@ -2223,6 +2308,7 @@ function openUserPrefsModal(){
   // Thème actif
   const currentTheme = localStorage.getItem(LS_THEME) || "auto";
   document.querySelectorAll(".theme-btn").forEach(b => b.classList.toggle("active", b.dataset.themeVal === currentTheme));
+  updateNotifButtonUI();
   show($("userPrefsModal"));
 }
 
@@ -2417,7 +2503,19 @@ function listenMembers(){
 function listenReports(){
   if(state.unsubReports) state.unsubReports();
   const q = query(reportsCol(state.coproId), orderBy("createdAt", "desc"));
+  let firstSnapshot = true;
   state.unsubReports = onSnapshot(q, (snap) => {
+    if(!firstSnapshot){
+      snap.docChanges().forEach(change => {
+        if(change.type !== "added" && change.type !== "modified") return;
+        // hasPendingWrites = true veut dire que c'est notre propre écriture
+        // locale (pas encore confirmée par le serveur) : on ne se notifie pas
+        // soi-même pour ses propres signalements/modifications.
+        if(change.doc.metadata.hasPendingWrites) return;
+        notifyReportEvent(change.type, { id: change.doc.id, ...change.doc.data() });
+      });
+    }
+    firstSnapshot = false;
     state.reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderReportsList();
     renderAdminReportsList();
