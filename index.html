@@ -953,8 +953,8 @@ h1,h2,h3{ margin:0; }
         </div>
       </label>
       <label class="field">
-        <span class="field-label">Votre pseudo</span>
-        <input id="loginPseudo" type="text" autocomplete="username" placeholder="Ex. Marie, Appt 14" required class="input" maxlength="30">
+        <span class="field-label">Votre nom</span>
+        <input id="loginPseudo" type="text" autocomplete="username" placeholder="Ex. Dupont" required class="input" maxlength="30">
       </label>
       <label class="field">
         <span class="field-label">Code personnel</span>
@@ -989,9 +989,14 @@ h1,h2,h3{ margin:0; }
         </div>
       </label>
       <label class="field">
-        <span class="field-label">Choisissez un pseudo</span>
-        <input id="registerPseudo" type="text" autocomplete="username" placeholder="Ex. Marie, Appt 14" required class="input" maxlength="30">
-        <span class="field-hint">Ce nom sera visible de tous les résidents. Choisissez quelque chose de reconnaissable.</span>
+        <span class="field-label">Nom</span>
+        <input id="registerLastName" type="text" autocomplete="family-name" placeholder="Ex. Dupont" required class="input" maxlength="30">
+        <span class="field-hint">Sert d'identifiant de connexion — un seul compte par nom dans la copropriété.</span>
+      </label>
+      <label class="field">
+        <span class="field-label">Prénom</span>
+        <input id="registerFirstName" type="text" autocomplete="given-name" placeholder="Ex. Marie" required class="input" maxlength="30">
+        <span class="field-hint">Affiché aux autres résidents sous la forme « Dupont M. ».</span>
       </label>
       <label class="field">
         <span class="field-label">Choisissez un code personnel</span>
@@ -1266,6 +1271,21 @@ h1,h2,h3{ margin:0; }
 
 <!-- ============ MODALE: nouveau signalement ============ -->
 <!-- ============ MODALE PRÉFÉRENCES UTILISATEUR ============ -->
+<div id="pickLocationModal" class="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pickLocationModalTitle" style="max-width:420px;">
+    <h3 id="pickLocationModalTitle" style="margin:0 0 4px;">Un dernier point</h3>
+    <p class="settings-help" style="margin:0 0 16px;">Dans quel lieu résidez-vous ? Ça pré-remplira le lieu à chaque signalement, et permet aux autres résidents de savoir où vous joindre.</p>
+    <form id="formPickLocation" class="stack-form">
+      <label class="field">
+        <span class="field-label">Lieu</span>
+        <select id="pickLocationSelect" class="input" required></select>
+      </label>
+      <p id="pickLocationError" class="form-error" hidden></p>
+      <button type="submit" class="btn-primary btn-large btn-full">Valider</button>
+    </form>
+  </div>
+</div>
+
 <div id="residentsModal" class="modal-overlay" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="residentsModalTitle" style="max-width:460px;">
     <button class="modal-close" id="residentsModalClose" aria-label="Fermer">✕</button>
@@ -1311,15 +1331,26 @@ h1,h2,h3{ margin:0; }
 
     <div class="dash-divider"><span>Mon profil</span></div>
 
-    <!-- Changer le pseudo -->
+    <!-- Changer le nom -->
     <form id="formChangePseudo" class="inline-form" style="margin-top:14px;">
       <label class="field" style="flex:1;">
-        <span class="field-label">Changer mon pseudo</span>
-        <input id="newPseudo" type="text" class="input" maxlength="30" placeholder="Nouveau pseudo" autocomplete="off">
+        <span class="field-label">Changer mon nom</span>
+        <input id="newPseudo" type="text" class="input" maxlength="30" placeholder="Nouveau nom" autocomplete="family-name">
       </label>
       <button type="submit" class="btn-outline" style="align-self:flex-end;">Changer</button>
     </form>
     <p id="pseudoChangeError" class="form-error" hidden style="margin-top:6px;"></p>
+
+    <!-- Prénom (peut manquer pour les comptes créés avant cette fonctionnalité) -->
+    <form id="formChangeFirstName" class="inline-form" style="margin-top:14px;">
+      <label class="field" style="flex:1;">
+        <span class="field-label">Mon prénom</span>
+        <input id="newFirstName" type="text" class="input" maxlength="30" placeholder="Ex. Marie" autocomplete="given-name">
+        <span class="field-hint">Affiché aux autres résidents sous la forme « Nom P. ».</span>
+      </label>
+      <button type="submit" class="btn-outline" style="align-self:flex-end;">Enregistrer</button>
+    </form>
+    <p id="firstNameChangeError" class="form-error" hidden style="margin-top:6px;"></p>
 
     <!-- Changer l'email -->
     <form id="formChangeEmail" class="inline-form" style="margin-top:14px;">
@@ -1546,6 +1577,7 @@ let state = {
   coproCode: null,
   groupId: null,    // sous-groupe sélectionné pour signaler
   pseudo: null,
+  firstName: null,    // prénom (optionnel ; absent pour les comptes créés avant cette fonctionnalité)
   email: null,        // e-mail du résident (obligatoire depuis l'inscription)
   memberId: null,
   defaultGroupId: null, // bâtiment préféré de l'utilisateur (pré-sélectionné à la création d'un signalement)   // identifiant unique de résident (preuve d'auteur, anti-usurpation)
@@ -1590,6 +1622,7 @@ function saveSession(){
     coproName: state.coproName,
     coproCode: state.coproCode,
     pseudo: state.pseudo,
+    firstName: state.firstName || null,
     memberId: state.memberId,
     isAdmin: state.isAdmin,
     email: state.email || null,
@@ -1709,6 +1742,7 @@ async function init(){
         state.coproName = data.name;
         state.coproCode = data.code;
         state.pseudo = session.pseudo;
+        state.firstName = session.firstName || null;
         state.email = session.email || null;
         state.memberId = session.memberId || null;
         state.isAdmin = !!session.isAdmin;
@@ -1774,6 +1808,7 @@ function bindStaticEvents(){
   // Forms
   $("formLogin").addEventListener("submit", onLoginSubmit);
   $("formRegister").addEventListener("submit", onRegisterSubmit);
+  $("formPickLocation").addEventListener("submit", onPickLocationSubmit);
   $("formCreate").addEventListener("submit", onCreateSubmit);
   $("formAdminLogin").addEventListener("submit", onAdminLoginSubmit);
   $("formReport").addEventListener("submit", onReportSubmit);
@@ -1797,6 +1832,7 @@ function bindStaticEvents(){
   $("btnNotifToggle").addEventListener("click", toggleNotifications);
   $("btnDeleteMyAccount").addEventListener("click", onDeleteMyAccount);
   $("formChangePseudo").addEventListener("submit", onChangePseudo);
+  $("formChangeFirstName").addEventListener("submit", onChangeFirstName);
   $("formChangeEmail").addEventListener("submit", onChangeEmail);
   $("formChangeCode").addEventListener("submit", onChangeCode);
   document.querySelectorAll(".theme-btn").forEach(btn => {
@@ -1969,6 +2005,21 @@ function normalizePseudo(pseudo){
   return (pseudo || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+// Nom d'affichage : "Nom" seul si aucun prénom renseigné (comptes créés
+// avant cette fonctionnalité), sinon "Nom P." (initiale du prénom, en
+// majuscule). Le champ `pseudo` reste techniquement le NOM (identifiant
+// de connexion) ; `firstName` est distinct et optionnel.
+function displayName(m){
+  if(!m) return "";
+  const last = m.pseudo || "";
+  const first = (m.firstName || "").trim();
+  return first ? `${last} ${first.charAt(0).toUpperCase()}.` : last;
+}
+
+function currentDisplayName(){
+  return displayName({ pseudo: state.pseudo, firstName: state.firstName });
+}
+
 // Adresse e-mail désormais obligatoire (compte résident) : validation
 // basique côté client (le champ HTML type="email" filtre déjà une bonne
 // partie des cas, ceci est une double sécurité avant écriture Firestore).
@@ -2007,7 +2058,7 @@ async function onLoginSubmit(e){
 
     const idxSnap = await getDoc(pseudoIndexRef(coproId, pseudoKey));
     if(!idxSnap.exists()){
-      errEl.textContent = "Pseudo introuvable dans cette copropriété. Vérifiez l'orthographe ou créez un compte.";
+      errEl.textContent = "Nom introuvable dans cette copropriété. Vérifiez l'orthographe ou créez un compte.";
       show(errEl); return;
     }
     const memberId = idxSnap.data().memberId;
@@ -2021,12 +2072,13 @@ async function onLoginSubmit(e){
     state.coproName = coproData.name;
     state.coproCode = coproData.code;
     state.pseudo = memberData.pseudo;
+    state.firstName = memberData.firstName || null;
     state.email = memberData.email || null;
     state.memberId = memberId;
     state.defaultGroupId = memberData.defaultGroupId || null;
     state.isAdmin = false;
     saveSession();
-    toast(`Bienvenue, ${state.pseudo} !`, "success");
+    toast(`Bienvenue, ${currentDisplayName()} !`, "success");
     enterCoproSpace();
   }catch(err){
     console.error(err);
@@ -2047,11 +2099,12 @@ async function onRegisterSubmit(e){
   hide(errEl);
 
   const code = normalizeCode($("registerCode").value);
-  const pseudo = $("registerPseudo").value.trim();
+  const pseudo = $("registerLastName").value.trim();
+  const firstName = $("registerFirstName").value.trim();
   const personalCode = $("registerPersonalCode").value.trim();
   const email = $("registerEmail").value.trim().toLowerCase();
-  if(!code || !pseudo || personalCode.length < 4 || !email){
-    errEl.textContent = "Merci de renseigner le code d'accès, un pseudo, un code personnel (4 caractères min.) et une adresse e-mail.";
+  if(!code || !pseudo || !firstName || personalCode.length < 4 || !email){
+    errEl.textContent = "Merci de renseigner le code d'accès, votre nom, votre prénom, un code personnel (4 caractères min.) et une adresse e-mail.";
     show(errEl); return;
   }
   if(!isValidEmail(email)){
@@ -2073,7 +2126,7 @@ async function onRegisterSubmit(e){
 
     const idxSnap = await getDoc(pseudoIndexRef(coproId, pseudoKey));
     if(idxSnap.exists()){
-      errEl.textContent = `Le pseudo "${pseudo}" est déjà utilisé dans cette copropriété. Choisissez-en un autre, ou connectez-vous si c'est votre compte.`;
+      errEl.textContent = `Le nom "${pseudo}" est déjà utilisé dans cette copropriété. S'il s'agit d'un homonyme, ajoutez une distinction (ex. "${pseudo} 2"), ou connectez-vous si c'est votre compte.`;
       show(errEl); return;
     }
 
@@ -2081,7 +2134,7 @@ async function onRegisterSubmit(e){
     await createUserWithEmailAndPassword(auth, memberEmail(coproId, memberId), await derivePassword(personalCode));
 
     await setDoc(doc(membersCol(coproId), memberId), {
-      pseudo, pseudoKey, email, createdAt: serverTimestamp(),
+      pseudo, pseudoKey, firstName, email, createdAt: serverTimestamp(),
     });
     await setDoc(pseudoIndexRef(coproId, pseudoKey), { memberId });
 
@@ -2089,12 +2142,13 @@ async function onRegisterSubmit(e){
     state.coproName = coproData.name;
     state.coproCode = coproData.code;
     state.pseudo = pseudo;
+    state.firstName = firstName;
     state.email = email;
     state.memberId = memberId;
     state.isAdmin = false;
     saveSession();
-    toast(`Compte créé ! Bienvenue, ${pseudo} 🎉`, "success");
-    enterCoproSpace();
+    toast(`Compte créé ! Bienvenue, ${displayName({ pseudo, firstName })} 🎉`, "success");
+    await promptInitialLocation();
   }catch(err){
     console.error(err);
     errEl.textContent = fnErrorMessage(err, "Une erreur est survenue. Réessayez.");
@@ -2103,6 +2157,56 @@ async function onRegisterSubmit(e){
     setBtnLoading(btn, false);
   }
 }
+
+// =========================================================
+// SÉLECTION DU LIEU — juste après la création de compte
+// Évite les résidents qui oublient de le renseigner plus tard
+// dans les préférences. Pas de bouton "passer" : c'est volontaire.
+// =========================================================
+async function promptInitialLocation(){
+  let groups = [];
+  try{
+    const snap = await getDocs(groupsCol(state.coproId));
+    groups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }catch(err){ console.error(err); }
+
+  if(groups.length === 0){
+    // Copropriété sans lieu défini pour l'instant : rien à choisir.
+    enterCoproSpace();
+    return;
+  }
+
+  const sel = $("pickLocationSelect");
+  sel.innerHTML = groups.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("");
+  hide($("pickLocationError"));
+  show($("pickLocationModal"));
+}
+
+async function onPickLocationSubmit(e){
+  e.preventDefault();
+  const errEl = $("pickLocationError");
+  hide(errEl);
+  const groupId = $("pickLocationSelect").value;
+  if(!groupId){
+    errEl.textContent = "Merci de choisir un lieu.";
+    show(errEl); return;
+  }
+  const btn = e.target.querySelector("button[type=submit]");
+  setBtnLoading(btn, true);
+  try{
+    await updateDoc(doc(membersCol(state.coproId), state.memberId), { defaultGroupId: groupId });
+    state.defaultGroupId = groupId;
+    hide($("pickLocationModal"));
+    enterCoproSpace();
+  }catch(err){
+    console.error(err);
+    errEl.textContent = "Erreur, réessayez.";
+    show(errEl);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
 
 // =========================================================
 // CONNEXION ADMIN (espace déjà créé)
@@ -2267,11 +2371,13 @@ function openUserPrefsModal(){
     if(g.id === state.defaultGroupId) opt.selected = true;
     sel.appendChild(opt);
   });
-  // Pseudo et email pré-remplis
+  // Pseudo (nom), prénom et email pré-remplis
   $("newPseudo").value = state.pseudo || "";
+  $("newFirstName").value = state.firstName || "";
   $("newEmail").value = state.email || "";
   $("newPersonalCode").value = "";
   hide($("pseudoChangeError"));
+  hide($("firstNameChangeError"));
   // Thème actif
   const currentTheme = localStorage.getItem(LS_THEME) || "auto";
   document.querySelectorAll(".theme-btn").forEach(b => b.classList.toggle("active", b.dataset.themeVal === currentTheme));
@@ -2298,16 +2404,16 @@ async function onChangePseudo(e){
   const errEl = $("pseudoChangeError");
   hide(errEl);
   if(!newPseudo || newPseudo === state.pseudo) return;
-  if(newPseudo.length < 2){ errEl.textContent = "Le pseudo doit faire au moins 2 caractères."; show(errEl); return; }
+  if(newPseudo.length < 2){ errEl.textContent = "Le nom doit faire au moins 2 caractères."; show(errEl); return; }
   const btn = e.target.querySelector("button[type=submit]");
   setBtnLoading(btn, true);
   try{
     const newKey = normalizePseudo(newPseudo);
     const oldKey = normalizePseudo(state.pseudo);
-    // Vérifier l'unicité du nouveau pseudo via l'index
+    // Vérifier l'unicité du nouveau nom via l'index
     const idxSnap = await getDoc(pseudoIndexRef(state.coproId, newKey));
     if(idxSnap.exists() && idxSnap.data().memberId !== state.memberId){
-      errEl.textContent = `Le pseudo "${newPseudo}" est déjà utilisé.`; show(errEl); return;
+      errEl.textContent = `Le nom "${newPseudo}" est déjà utilisé.`; show(errEl); return;
     }
     await updateDoc(doc(membersCol(state.coproId), state.memberId), {
       pseudo: newPseudo, pseudoKey: newKey,
@@ -2317,9 +2423,31 @@ async function onChangePseudo(e){
       await deleteDoc(pseudoIndexRef(state.coproId, oldKey)).catch(() => {});
     }
     state.pseudo = newPseudo;
-    $("topbarUser").textContent = newPseudo;
+    $("topbarUser").textContent = currentDisplayName();
     saveSession();
-    toast("Pseudo mis à jour ✓", "success");
+    toast("Nom mis à jour ✓", "success");
+  }catch(err){
+    console.error(err);
+    errEl.textContent = "Erreur lors de la mise à jour."; show(errEl);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+async function onChangeFirstName(e){
+  e.preventDefault();
+  const newFirstName = $("newFirstName").value.trim();
+  const errEl = $("firstNameChangeError");
+  hide(errEl);
+  if(!newFirstName){ errEl.textContent = "Merci de renseigner un prénom."; show(errEl); return; }
+  const btn = e.target.querySelector("button[type=submit]");
+  setBtnLoading(btn, true);
+  try{
+    await updateDoc(doc(membersCol(state.coproId), state.memberId), { firstName: newFirstName });
+    state.firstName = newFirstName;
+    $("topbarUser").textContent = currentDisplayName();
+    saveSession();
+    toast("Prénom enregistré ✓", "success");
   }catch(err){
     console.error(err);
     errEl.textContent = "Erreur lors de la mise à jour."; show(errEl);
@@ -2387,7 +2515,7 @@ function logout(){
 function enterCoproSpace(){
   $("topbarCopro").textContent = state.coproName;
   $("topbarGroup").textContent = state.isAdmin ? "Administration" : `Code : ${state.coproCode}`;
-  $("topbarUser").textContent = state.pseudo;
+  $("topbarUser").textContent = currentDisplayName();
   show($("topbar"));
   if(state.isAdmin) show($("btnAdminToggle")); else hide($("btnAdminToggle"));
   // Bouton "Supprimer mon compte" : visible pour les résidents qui ont un memberId
@@ -2803,7 +2931,7 @@ async function onReportSubmit(e){
       groupName: groupName,
       comment: comment,
       photos: photoUrls,
-      author: state.pseudo,
+      author: currentDisplayName(),
       authorId: state.memberId || null,
       status: "reported",
       createdAt: serverTimestamp(),
@@ -3064,7 +3192,7 @@ function openDetailModal(r, isAdminView){
         await addDoc(historyCol(state.coproId, r.id), {
           type: "comment",
           toStatus: r.status,
-          author: state.pseudo,
+          author: currentDisplayName(),
           authorId: state.memberId || null,
           comment: text || "",
           photos: photoUrls,
@@ -3174,7 +3302,7 @@ function openStatusChangeModal(r, newStatus){
       await addDoc(historyCol(state.coproId, r.id), {
         fromStatus: r.status,
         toStatus: newStatus,
-        author: state.pseudo,
+        author: currentDisplayName(),
         authorId: state.memberId || null,
         comment: comment || "",
         photos: photoUrls,
@@ -3425,7 +3553,7 @@ function renderResidentsModalList(){
         <span class="location-group-count">${sec.members.length}</span>
       </h4>
       <ul class="manage-list">
-        ${sec.members.map(m => `<li class="manage-item"><span class="mi-ic">👤</span><span class="mi-name">${escapeHtml(m.pseudo)}</span></li>`).join("")}
+        ${sec.members.map(m => `<li class="manage-item"><span class="mi-ic">👤</span><span class="mi-name">${escapeHtml(displayName(m))}</span></li>`).join("")}
       </ul>
     </div>
   `).join("");
@@ -3448,7 +3576,7 @@ function renderMembersAdminList(){
 
     li.innerHTML = `
       <span class="mi-ic">👤</span>
-      <span class="mi-name">${escapeHtml(m.pseudo)}<span class="mi-location">📍 ${escapeHtml(locationName)}</span></span>
+      <span class="mi-name">${escapeHtml(displayName(m))}<span class="mi-location">📍 ${escapeHtml(locationName)}</span></span>
       <button class="mi-reset btn-ghost btn-small" data-id="${m.id}" data-pseudo="${escapeHtml(m.pseudo)}" style="color:var(--warn);font-size:12px;">Réinitialiser le code</button>
       <button class="mi-del" data-id="${m.id}" data-pseudo="${escapeHtml(m.pseudo)}">Supprimer</button>
     `;
@@ -3484,7 +3612,7 @@ async function onDeleteMyAccount(){
     return;
   }
   const confirmed = confirm(
-    `Supprimer votre compte "${state.pseudo}" ?\n\n` +
+    `Supprimer votre compte "${currentDisplayName()}" ?\n\n` +
     `Vos signalements seront conservés dans l'historique mais ne seront plus liés à votre identité.\n\n` +
     `Cette action est irréversible.`
   );
