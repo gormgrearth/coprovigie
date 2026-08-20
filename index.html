@@ -507,6 +507,7 @@ h1,h2,h3{ margin:0; }
   border:1.5px dashed var(--line);
 }
 .report-card{
+  position:relative;
   display:flex; align-items:flex-start; gap:14px;
   background:
     linear-gradient(135deg,
@@ -520,11 +521,22 @@ h1,h2,h3{ margin:0; }
   box-shadow:var(--shadow-card);
   text-align:left;
   width:100%;
+  overflow:hidden;
   transition: border-color .15s ease, background .15s ease;
 }
 .report-card--new{
   border-width:3px;
   border-left-width:6px;
+}
+.new-badge{
+  position:absolute; top:0; right:0;
+  background:var(--signal); color:#fff;
+  font-size:10px; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
+  padding:3px 10px 3px 12px;
+  border-bottom-left-radius:var(--radius-m);
+  line-height:1.4;
+  box-shadow:0 1px 4px rgba(0,0,0,.15);
+  pointer-events:none;
 }
 .report-card:hover{
   border-color:color-mix(in srgb, var(--group-color, var(--line)) 50%, var(--line));
@@ -3039,6 +3051,7 @@ function reportCardEl(r, isAdminView){
   card.className = "report-card" + (isNewOrUpdated(r) ? " report-card--new" : "");
   if(groupColor) card.style.setProperty("--group-color", groupColor);
   card.innerHTML = `
+    ${isNewOrUpdated(r) ? `<span class="new-badge">Nouveau</span>` : ""}
     <div class="report-ic">${escapeHtml(r.typeIcon || "❗")}</div>
     <div class="report-body">
       <div class="report-top">
