@@ -1547,6 +1547,10 @@ const derivePassword = (secret) => sha256Hex(String(secret));
 
 const pseudoIndexCol = (coproId) => collection(db, "coprovigie", coproId, "pseudoIndex");
 const pseudoIndexRef = (coproId, pseudoKey) => doc(db, "coprovigie", coproId, "pseudoIndex", pseudoKey);
+// Un seul document par compte (admin, ou memberId précis) : { seen: { [reportId]: Timestamp } }.
+// Synchronisé entre tous les appareils d'un même compte (contrairement à
+// l'ancienne version en localStorage, propre à chaque appareil).
+const seenTrackingRef = () => doc(db, "coprovigie", state.coproId, "seenTracking", state.isAdmin ? "admin" : state.memberId);
 
 function fnErrorMessage(err, fallback){
   const map = {
@@ -1606,6 +1610,8 @@ let state = {
   unsubTypes: null,
   unsubMembers: null,
   unsubCoproSettings: null,
+  unsubSeenTracking: null,
+  seenMap: {}, // { reportId: millis dernière lecture }, synchronisé via Firestore (tous appareils)
   pendingType: null, // type en cours de signalement (pour la modale)
   pendingPhotos: [], // fichiers photos en attente (max 3) pour la modale de signalement
   autoHideResolvedDays: 0, // 0 = désactivé. Masque les signalements résolus depuis plus de X jours.
@@ -2516,9 +2522,10 @@ function logout(){
   if(state.unsubGroups) state.unsubGroups();
   if(state.unsubTypes) state.unsubTypes();
   if(state.unsubMembers) state.unsubMembers();
+  if(state.unsubSeenTracking) state.unsubSeenTracking();
   clearSession();
   signOut(auth).catch(() => {});
-  state = { ...state, coproId:null, coproName:null, coproCode:null, pseudo:null, memberId:null, isAdmin:false, groups:[], types:[], reports:[], members:[] };
+  state = { ...state, coproId:null, coproName:null, coproCode:null, pseudo:null, firstName:null, memberId:null, isAdmin:false, groups:[], types:[], reports:[], members:[], seenMap:{} };
   hide($("topbar"));
   hide($("btnAdminToggle"));
   showScreen("screenWelcome");
@@ -2545,6 +2552,7 @@ function enterCoproSpace(){
   listenReports();
   listenCoproSettings();
   listenMembers();
+  listenSeenTracking();
 
   showScreen("screenDashboard");
 }
@@ -2967,10 +2975,11 @@ async function onReportSubmit(e){
 }
 
 // =========================================================
-// SUIVI "NOUVEAU / MIS À JOUR" (par appareil, via localStorage)
+// SUIVI "NOUVEAU / MIS À JOUR" (Firestore — synchronisé entre
+// tous les appareils d'un même compte, admin ou résident).
 // Un signalement jamais ouvert, ou dont la dernière mise à jour
 // (updatedAt) est postérieure à la dernière lecture, est considéré
-// "nouveau ou mis à jour" : cadre plus épais + filtre dédié.
+// "nouveau ou mis à jour" : cadre plus épais + bandeau + filtre dédié.
 // =========================================================
 function reportTimeMillis(r){
   const ts = r.updatedAt || r.createdAt;
@@ -2979,28 +2988,41 @@ function reportTimeMillis(r){
   return 0;
 }
 
-function seenReportsKey(){
-  // Inclut l'identité du compte connecté (admin, ou memberId précis) : sur
-  // un même appareil/navigateur, deux comptes différents (ex. admin puis
-  // résident, ou plusieurs résidents) ne doivent PAS partager le même
-  // historique de lecture.
-  const who = state.isAdmin ? "admin" : (state.memberId || "anon");
-  return `coprovigie_seen_${state.coproId}_${who}`;
+function listenSeenTracking(){
+  if(state.unsubSeenTracking) state.unsubSeenTracking();
+  state.unsubSeenTracking = onSnapshot(seenTrackingRef(), (snap) => {
+    const seen = snap.exists() ? (snap.data().seen || {}) : {};
+    const map = {};
+    Object.keys(seen).forEach(id => {
+      const ts = seen[id];
+      map[id] = ts?.toMillis ? ts.toMillis() : (typeof ts?.seconds === "number" ? ts.seconds * 1000 : 0);
+    });
+    state.seenMap = map;
+    renderReportsList();
+    renderAdminReportsList();
+  }, (err) => console.error("seenTracking listener", err));
 }
 
-function getSeenMap(){
-  try{ return JSON.parse(localStorage.getItem(seenReportsKey()) || "{}"); }
-  catch(e){ return {}; }
-}
-
-function markReportSeen(r){
-  const map = getSeenMap();
-  map[r.id] = reportTimeMillis(r);
-  try{ localStorage.setItem(seenReportsKey(), JSON.stringify(map)); }catch(e){}
+async function markReportSeen(r){
+  const ref = seenTrackingRef();
+  try{
+    // Notation pointée : ne touche QUE cette clé du sous-objet "seen",
+    // contrairement à setDoc(..., {merge:true}) avec un objet imbriqué qui
+    // remplacerait tout le sous-objet et effacerait les autres entrées.
+    await updateDoc(ref, { [`seen.${r.id}`]: serverTimestamp() });
+  }catch(err){
+    if(err.code === "not-found"){
+      // Première lecture de ce compte : le document n'existe pas encore.
+      try{ await setDoc(ref, { seen: { [r.id]: serverTimestamp() } }); }
+      catch(err2){ console.error("markReportSeen (création)", err2); }
+    }else{
+      console.error("markReportSeen", err);
+    }
+  }
 }
 
 function isNewOrUpdated(r){
-  const seenAt = getSeenMap()[r.id];
+  const seenAt = state.seenMap[r.id];
   if(seenAt === undefined) return true;
   return reportTimeMillis(r) > seenAt;
 }
