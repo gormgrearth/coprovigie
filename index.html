@@ -1583,6 +1583,7 @@ const STATUS_LABELS = { reported: "Signalé", in_progress: "En cours", resolved:
 const LS_KEY = "coprovigie_session";
 const LS_THEME = "coprovigie_theme";
 const LS_NOTIF_ENABLED = "coprovigie_notif_enabled";
+const LS_SHOW_ONLY_NEW = "coprovigie_show_only_new";
 let state = {
   coproId: null,
   coproName: null,
@@ -1609,7 +1610,7 @@ let state = {
   pendingPhotos: [], // fichiers photos en attente (max 3) pour la modale de signalement
   autoHideResolvedDays: 0, // 0 = désactivé. Masque les signalements résolus depuis plus de X jours.
   showOldResolved: false,  // case à cocher locale (session) pour réafficher ceux masqués
-  showOnlyNew: false,      // case à cocher locale : n'afficher que nouveaux/mis à jour
+  showOnlyNew: localStorage.getItem(LS_SHOW_ONLY_NEW) === "1", // persistant (contrairement aux autres filtres, volontairement)
 };
 
 // Palette de couleurs proposées par défaut pour identifier rapidement
@@ -1900,15 +1901,17 @@ function bindStaticEvents(){
     renderAdminReportsList();
   });
 
-  // Case "nouveaux / mis à jour uniquement" (synchronisée entre vue résident et admin)
+  // Case "nouveaux / mis à jour uniquement" (synchronisée entre vue résident et admin, et mémorisée)
   $("showOnlyNew").addEventListener("change", (e) => {
     state.showOnlyNew = e.target.checked;
+    localStorage.setItem(LS_SHOW_ONLY_NEW, state.showOnlyNew ? "1" : "0");
     $("adminShowOnlyNew").checked = state.showOnlyNew;
     renderReportsList();
     renderAdminReportsList();
   });
   $("adminShowOnlyNew").addEventListener("change", (e) => {
     state.showOnlyNew = e.target.checked;
+    localStorage.setItem(LS_SHOW_ONLY_NEW, state.showOnlyNew ? "1" : "0");
     $("showOnlyNew").checked = state.showOnlyNew;
     renderReportsList();
     renderAdminReportsList();
@@ -2534,6 +2537,8 @@ function enterCoproSpace(){
   // (pas pour l'admin connecté par mot de passe, qui supprime via les réglages)
   if(!state.isAdmin && state.memberId) show($("btnUserPrefs")); else hide($("btnUserPrefs"));
   show($("btnResidentsList"));
+  $("showOnlyNew").checked = state.showOnlyNew;
+  $("adminShowOnlyNew").checked = state.showOnlyNew;
 
   listenGroups();
   listenTypes();
@@ -2975,7 +2980,12 @@ function reportTimeMillis(r){
 }
 
 function seenReportsKey(){
-  return `coprovigie_seen_${state.coproId}`;
+  // Inclut l'identité du compte connecté (admin, ou memberId précis) : sur
+  // un même appareil/navigateur, deux comptes différents (ex. admin puis
+  // résident, ou plusieurs résidents) ne doivent PAS partager le même
+  // historique de lecture.
+  const who = state.isAdmin ? "admin" : (state.memberId || "anon");
+  return `coprovigie_seen_${state.coproId}_${who}`;
 }
 
 function getSeenMap(){
