@@ -2664,7 +2664,7 @@ function listenMembers(){
 
 function listenReports(){
   if(state.unsubReports) state.unsubReports();
-  const q = query(reportsCol(state.coproId), orderBy("createdAt", "desc"));
+  const q = query(reportsCol(state.coproId), orderBy("updatedAt", "desc"));
   let firstSnapshot = true;
   state.unsubReports = onSnapshot(q, (snap) => {
     if(!firstSnapshot){
