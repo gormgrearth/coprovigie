@@ -659,6 +659,8 @@ h1,h2,h3{ margin:0; }
   margin:-6px 0 10px; cursor:pointer; user-select:none;
 }
 .old-resolved-toggle input{ width:16px; height:16px; accent-color:var(--ink); cursor:pointer; }
+.export-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:14px 0; }
+.export-count{ font-size:12.5px; color:var(--ink-soft); margin-right:auto; }
 
 .settings-card{
   background:var(--paper-raised); border:1.5px solid var(--line-soft);
@@ -889,6 +891,9 @@ h1,h2,h3{ margin:0; }
 }
 
 </style>
+<!-- Export bilan (admin) : génération Excel/PDF entièrement côté navigateur -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -1211,6 +1216,11 @@ h1,h2,h3{ margin:0; }
         <input type="checkbox" id="adminShowOldResolved">
         <span>Afficher aussi les signalements résolus de plus de <span id="adminOldResolvedDaysLabel">—</span> jours</span>
       </label>
+      <div class="export-row">
+        <span id="exportCount" class="export-count"></span>
+        <button type="button" id="btnExportExcel" class="btn-outline btn-small">📊 Exporter en Excel</button>
+        <button type="button" id="btnExportPdf" class="btn-outline btn-small">📄 Exporter en PDF</button>
+      </div>
       <div id="adminReportsList" class="reports-list">
         <p class="empty-state">Chargement…</p>
       </div>
@@ -1942,6 +1952,9 @@ function bindStaticEvents(){
     renderReportsList();
     renderAdminReportsList();
   });
+
+  $("btnExportExcel").addEventListener("click", exportToExcel);
+  $("btnExportPdf").addEventListener("click", exportToPdf);
 
   // Admin tabs
   document.querySelectorAll(".admin-tab").forEach(tab => {
@@ -3488,12 +3501,147 @@ function renderAdminReportsList(){
   const list = $("adminReportsList");
   if(!state.isAdmin) return;
   const reports = filteredReports(state.adminFilter, null);
+  const countEl = $("exportCount");
+  if(countEl) countEl.textContent = `${reports.length} signalement${reports.length > 1 ? "s" : ""} dans l'export (filtre courant)`;
   if(reports.length === 0){
     list.innerHTML = `<p class="empty-state">Aucun signalement.</p>`;
     return;
   }
   list.innerHTML = "";
   reports.forEach(r => list.appendChild(reportCardEl(r, true)));
+}
+
+// =========================================================
+// EXPORT DU BILAN (admin) — Excel (données) et PDF (avec photos)
+// Respecte le filtre de statut actuellement sélectionné dans l'onglet.
+// =========================================================
+function fmtDate(ts){
+  const d = ts?.toDate ? ts.toDate() : (typeof ts?.seconds === "number" ? new Date(ts.seconds * 1000) : null);
+  if(!d) return "";
+  return d.toLocaleDateString("fr-FR") + " " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function exportFilterLabel(){
+  const labels = { all: "tous", reported: "signales", in_progress: "en_cours", resolved: "resolus" };
+  return labels[state.adminFilter] || "tous";
+}
+
+function exportFileBaseName(){
+  const copro = (state.coproName || "copropriete").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-");
+  const date = new Date().toISOString().slice(0, 10);
+  return `bilan-signalements-${copro}-${exportFilterLabel()}-${date}`;
+}
+
+function exportToExcel(){
+  const reports = filteredReports(state.adminFilter, null);
+  if(reports.length === 0){ toast("Aucun signalement à exporter avec ce filtre.", "error"); return; }
+  if(typeof XLSX === "undefined"){ toast("La bibliothèque d'export Excel n'a pas pu se charger. Vérifiez votre connexion.", "error"); return; }
+
+  const rows = reports.map(r => ({
+    "Type": r.typeName || "",
+    "Lieu": r.groupName || "",
+    "Statut": STATUS_LABELS[r.status] || r.status || "",
+    "Commentaire": r.comment || "",
+    "Signalé par": reportAuthorDisplay(r),
+    "Lieu de rattachement de l'auteur": reportAuthorHomeLocation(r) || "",
+    "Créé le": fmtDate(r.createdAt),
+    "Dernière mise à jour": fmtDate(r.updatedAt),
+    "Nombre de photos": (r.photos || []).length,
+  }));
+
+  const sheet = XLSX.utils.json_to_sheet(rows);
+  sheet["!cols"] = [
+    { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 45 },
+    { wch: 20 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 8 },
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheet, "Signalements");
+  XLSX.writeFile(wb, `${exportFileBaseName()}.xlsx`);
+  toast(`Export Excel généré (${reports.length} signalement${reports.length > 1 ? "s" : ""}).`, "success");
+}
+
+async function exportToPdf(){
+  const reports = filteredReports(state.adminFilter, null);
+  if(reports.length === 0){ toast("Aucun signalement à exporter avec ce filtre.", "error"); return; }
+  if(typeof window.jspdf === "undefined"){ toast("La bibliothèque d'export PDF n'a pas pu se charger. Vérifiez votre connexion.", "error"); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  let y = margin;
+
+  const filterLabels = { all: "Tous les statuts", reported: "Signalés uniquement", in_progress: "En cours uniquement", resolved: "Résolus uniquement" };
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text(`Bilan des signalements — ${state.coproName || ""}`, margin, y);
+  y += 7;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(110);
+  doc.text(`${filterLabels[state.adminFilter] || "Tous les statuts"} · ${reports.length} signalement${reports.length > 1 ? "s" : ""} · généré le ${new Date().toLocaleDateString("fr-FR")}`, margin, y);
+  doc.setTextColor(20);
+  y += 9;
+
+  const ensureSpace = (needed) => {
+    if(y + needed > pageH - margin){ doc.addPage(); y = margin; }
+  };
+
+  for(const r of reports){
+    ensureSpace(28);
+    doc.setDrawColor(220);
+    doc.line(margin, y, pageW - margin, y);
+    y += 6;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text(`${r.typeIcon || "❗"} ${r.typeName || "Incident"}`, margin, y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    const statusLabel = STATUS_LABELS[r.status] || r.status || "";
+    doc.text(`[${statusLabel}]`, pageW - margin, y, { align: "right" });
+    y += 6;
+
+    doc.setFontSize(9.5);
+    doc.setTextColor(90);
+    const home = reportAuthorHomeLocation(r);
+    doc.text(`📍 ${r.groupName || "Non précisé"}   ·   👤 ${reportAuthorDisplay(r)}${home ? ` (${home})` : ""}`, margin, y);
+    y += 5;
+    doc.text(`Créé le ${fmtDate(r.createdAt)}   ·   Dernière M.à.J. ${fmtDate(r.updatedAt)}`, margin, y);
+    y += 5;
+    doc.setTextColor(20);
+
+    if(r.comment){
+      const lines = doc.splitTextToSize(r.comment, pageW - margin * 2);
+      ensureSpace(lines.length * 4.6 + 2);
+      doc.setFontSize(10);
+      doc.text(lines, margin, y);
+      y += lines.length * 4.6 + 2;
+    }
+
+    if(r.photos && r.photos.length > 0){
+      const thumbSize = 32;
+      const gap = 4;
+      ensureSpace(thumbSize + 4);
+      let x = margin;
+      for(const photo of r.photos){
+        if(x + thumbSize > pageW - margin){ x = margin; y += thumbSize + gap; ensureSpace(thumbSize + 4); }
+        try{
+          const format = photo.startsWith("data:image/png") ? "PNG" : "JPEG";
+          doc.addImage(photo, format, x, y, thumbSize, thumbSize, undefined, "FAST");
+        }catch(e){ console.error("PDF image error", e); }
+        x += thumbSize + gap;
+      }
+      y += thumbSize + 6;
+    }else{
+      y += 3;
+    }
+  }
+
+  doc.save(`${exportFileBaseName()}.pdf`);
+  toast(`Export PDF généré (${reports.length} signalement${reports.length > 1 ? "s" : ""}).`, "success");
 }
 
 function populateAdminScreen(){
