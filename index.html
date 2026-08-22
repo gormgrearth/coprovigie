@@ -605,6 +605,12 @@ h1,h2,h3{ margin:0; }
 .manage-item .mi-color::-webkit-color-swatch{ border:none; border-radius:50%; }
 .manage-item .mi-name{ flex:1; font-weight:600; font-size:14px; display:flex; flex-direction:column; gap:2px; }
 .manage-item .mi-location{ font-weight:400; font-size:12px; color:var(--ink-soft); }
+.manage-item--compact{ padding:8px 12px; gap:8px; }
+.manage-item--compact .mi-name{
+  flex-direction:row; align-items:baseline; flex-wrap:wrap; gap:4px;
+  font-size:13.5px;
+}
+#membersAdminList.manage-list{ gap:5px; }
 .location-group{ margin-bottom:22px; }
 .location-group:last-child{ margin-bottom:0; }
 .location-group-title{
@@ -617,6 +623,12 @@ h1,h2,h3{ margin:0; }
   font-size:12px; font-weight:600; color:var(--ink-soft);
   background:var(--paper-raised); border:1px solid var(--line);
   border-radius:999px; padding:1px 8px; margin-left:2px;
+}
+.resident-chip-list{ display:flex; flex-wrap:wrap; gap:6px; }
+.resident-chip{
+  font-size:12.5px; font-weight:600; color:var(--ink);
+  background:var(--paper-raised); border:1px solid var(--line-soft);
+  border-radius:999px; padding:4px 10px; line-height:1.3;
 }
 .manage-item .mi-del{
   background:none; border:none; color:var(--meta); font-size:13px; font-weight:600;
@@ -2032,7 +2044,7 @@ function normalizePseudo(pseudo){
 // de connexion) ; `firstName` est distinct et optionnel.
 function displayName(m){
   if(!m) return "";
-  const last = m.pseudo || "";
+  const last = (m.pseudo || "").toUpperCase();
   const first = (m.firstName || "").trim();
   return first ? `${last} ${first.charAt(0).toUpperCase()}.` : last;
 }
@@ -3597,9 +3609,9 @@ function renderResidentsModalList(){
         ${escapeHtml(sec.name)}
         <span class="location-group-count">${sec.members.length}</span>
       </h4>
-      <ul class="manage-list">
-        ${sec.members.map(m => `<li class="manage-item"><span class="mi-ic">👤</span><span class="mi-name">${escapeHtml(displayName(m))}</span></li>`).join("")}
-      </ul>
+      <div class="resident-chip-list">
+        ${sec.members.map(m => `<span class="resident-chip">${escapeHtml(displayName(m))}</span>`).join("")}
+      </div>
     </div>
   `).join("");
 }
@@ -3614,14 +3626,13 @@ function renderMembersAdminList(){
   }
   state.members.forEach(m => {
     const li = document.createElement("li");
-    li.className = "manage-item";
+    li.className = "manage-item manage-item--compact";
     const locationName = m.defaultGroupId
       ? (state.groups.find(g => g.id === m.defaultGroupId)?.name || "—")
       : "Non renseigné";
 
     li.innerHTML = `
-      <span class="mi-ic">👤</span>
-      <span class="mi-name">${escapeHtml(displayName(m))}<span class="mi-location">📍 ${escapeHtml(locationName)}</span></span>
+      <span class="mi-name">${escapeHtml(displayName(m))} <span class="mi-location">· 📍 ${escapeHtml(locationName)}</span></span>
       <button class="mi-reset btn-ghost btn-small" data-id="${m.id}" data-pseudo="${escapeHtml(m.pseudo)}" style="color:var(--warn);font-size:12px;">Réinitialiser le code</button>
       <button class="mi-del" data-id="${m.id}" data-pseudo="${escapeHtml(m.pseudo)}">Supprimer</button>
     `;
