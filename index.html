@@ -1329,7 +1329,10 @@ h1,h2,h3{ margin:0; }
     <!-- Lieu de rattachement -->
     <div class="field" style="margin-bottom:18px;">
       <span class="field-label">Lieu de rattachement</span>
-      <select id="prefDefaultGroup" class="input select"></select>
+      <div class="inline-form">
+        <select id="prefDefaultGroup" class="input select" style="flex:1;"></select>
+        <button type="button" id="btnSaveUserPrefs" class="btn-outline" style="align-self:flex-start;">Enregistrer</button>
+      </div>
       <span class="field-hint">Votre lieu habituel — pré-sélectionné à chaque nouveau signalement, visible des autres résidents, et affiché sur vos signalements déjà créés.</span>
     </div>
 
@@ -1351,8 +1354,6 @@ h1,h2,h3{ margin:0; }
         <button type="button" class="theme-btn" id="btnThemeAuto" data-theme-val="auto">🖥 Auto</button>
       </div>
     </div>
-
-    <button id="btnSaveUserPrefs" class="btn-primary btn-full" style="margin-bottom:24px;">Enregistrer les préférences</button>
 
     <div class="dash-divider"><span>Mon profil</span></div>
 
