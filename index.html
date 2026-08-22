@@ -1326,11 +1326,11 @@ h1,h2,h3{ margin:0; }
     <p class="eyebrow" style="margin-bottom:4px;">Mon compte</p>
     <h3 style="margin:0 0 22px;">Préférences</h3>
 
-    <!-- Bâtiment par défaut -->
+    <!-- Lieu de rattachement -->
     <div class="field" style="margin-bottom:18px;">
-      <span class="field-label">Bâtiment / lieu par défaut</span>
+      <span class="field-label">Lieu de rattachement</span>
       <select id="prefDefaultGroup" class="input select"></select>
-      <span class="field-hint">Pré-sélectionné à chaque nouveau signalement.</span>
+      <span class="field-hint">Votre lieu habituel — pré-sélectionné à chaque nouveau signalement, visible des autres résidents, et affiché sur vos signalements déjà créés.</span>
     </div>
 
     <!-- Notifications -->
@@ -1610,7 +1610,7 @@ let state = {
   firstName: null,    // prénom (optionnel ; absent pour les comptes créés avant cette fonctionnalité)
   email: null,        // e-mail du résident (obligatoire depuis l'inscription)
   memberId: null,
-  defaultGroupId: null, // bâtiment préféré de l'utilisateur (pré-sélectionné à la création d'un signalement)   // identifiant unique de résident (preuve d'auteur, anti-usurpation)
+  defaultGroupId: null, // lieu de rattachement de l'utilisateur (pré-sélectionné à la création d'un signalement)
   isAdmin: false,
   groups: [],
   types: [],
@@ -2424,7 +2424,7 @@ function notifyReportEvent(type, r){
 function openUserPrefsModal(){
   // Select bâtiment
   const sel = $("prefDefaultGroup");
-  sel.innerHTML = `<option value="">— Aucun bâtiment par défaut —</option>`;
+  sel.innerHTML = `<option value="">— Aucun lieu de rattachement —</option>`;
   state.groups.forEach(g => {
     const opt = document.createElement("option");
     opt.value = g.id; opt.textContent = g.name;
@@ -2447,15 +2447,20 @@ function openUserPrefsModal(){
 
 async function saveUserPrefs(){
   const groupId = $("prefDefaultGroup").value || null;
+  const groupName = groupId ? state.groups.find(g => g.id === groupId)?.name : null;
+  if(state.memberId){
+    try{
+      await updateDoc(doc(membersCol(state.coproId), state.memberId), { defaultGroupId: groupId || null });
+    }catch(err){
+      console.error(err);
+      toast("Impossible d'enregistrer le lieu de rattachement. Réessayez, ou renseignez d'abord un e-mail valide ci-dessus.", "error");
+      return; // ne pas fermer la modale ni faire croire à une réussite
+    }
+  }
   state.defaultGroupId = groupId;
   saveSession();
-  if(state.memberId){
-    try{ await updateDoc(doc(membersCol(state.coproId), state.memberId), { defaultGroupId: groupId || null }); }
-    catch(e){ console.error(e); }
-  }
   hide($("userPrefsModal"));
-  const groupName = groupId ? state.groups.find(g => g.id === groupId)?.name : null;
-  toast(groupName ? `Bâtiment par défaut : ${groupName}` : "Bâtiment par défaut supprimé", "success");
+  toast(groupName ? `Lieu de rattachement : ${groupName}` : "Lieu de rattachement supprimé", "success");
 }
 
 async function onChangePseudo(e){
