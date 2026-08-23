@@ -3537,8 +3537,9 @@ function exportToExcel(){
   if(reports.length === 0){ toast("Aucun signalement à exporter avec ce filtre.", "error"); return; }
   if(typeof XLSX === "undefined"){ toast("La bibliothèque d'export Excel n'a pas pu se charger. Vérifiez votre connexion.", "error"); return; }
 
-  const rows = reports.map(r => ({
-    "Type": r.typeName || "",
+  const orderedReports = groupReportsByType(reports).flatMap(g => g.reports);
+  const rows = orderedReports.map(r => ({
+    "Catégorie": r.typeName || "Sans catégorie",
     "Lieu": r.groupName || "",
     "Statut": STATUS_LABELS[r.status] || r.status || "",
     "Commentaire": r.comment || "",
@@ -3560,10 +3561,37 @@ function exportToExcel(){
   toast(`Export Excel généré (${reports.length} signalement${reports.length > 1 ? "s" : ""}).`, "success");
 }
 
+// Regroupe les signalements par type (catégorie), dans l'ordre des types
+// définis par la copro ; les types supprimés/inconnus tombent dans "Autres".
+function groupReportsByType(reports){
+  const byName = new Map();
+  reports.forEach(r => {
+    const name = r.typeName || "Sans catégorie";
+    if(!byName.has(name)) byName.set(name, []);
+    byName.get(name).push(r);
+  });
+  const orderedNames = state.types.map(t => t.name).filter(n => byName.has(n));
+  const remaining = [...byName.keys()].filter(n => !orderedNames.includes(n)).sort((a, b) => a.localeCompare(b, "fr"));
+  return [...orderedNames, ...remaining].map(name => ({ name, reports: byName.get(name) }));
+}
+
 async function exportToPdf(){
   const reports = filteredReports(state.adminFilter, null);
   if(reports.length === 0){ toast("Aucun signalement à exporter avec ce filtre.", "error"); return; }
   if(typeof window.jspdf === "undefined"){ toast("La bibliothèque d'export PDF n'a pas pu se charger. Vérifiez votre connexion.", "error"); return; }
+
+  toast("Génération du PDF en cours…", "success");
+
+  // Récupère l'historique (commentaires + changements de statut, avec
+  // leurs éventuelles photos) de chaque signalement exporté.
+  const historyByReport = {};
+  for(const r of reports){
+    try{
+      const q = query(historyCol(state.coproId, r.id), orderBy("createdAt", "asc"));
+      const snap = await getDocs(q);
+      historyByReport[r.id] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    }catch(e){ console.error("Historique export PDF", e); historyByReport[r.id] = []; }
+  }
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -3576,12 +3604,12 @@ async function exportToPdf(){
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.text(`Bilan des signalements — ${state.coproName || ""}`, margin, y);
+  doc.text(`Bilan des signalements - ${state.coproName || ""}`, margin, y);
   y += 7;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(110);
-  doc.text(`${filterLabels[state.adminFilter] || "Tous les statuts"} · ${reports.length} signalement${reports.length > 1 ? "s" : ""} · généré le ${new Date().toLocaleDateString("fr-FR")}`, margin, y);
+  doc.text(`${filterLabels[state.adminFilter] || "Tous les statuts"} - ${reports.length} signalement${reports.length > 1 ? "s" : ""} - genere le ${new Date().toLocaleDateString("fr-FR")}`, margin, y);
   doc.setTextColor(20);
   y += 9;
 
@@ -3589,54 +3617,95 @@ async function exportToPdf(){
     if(y + needed > pageH - margin){ doc.addPage(); y = margin; }
   };
 
-  for(const r of reports){
-    ensureSpace(28);
-    doc.setDrawColor(220);
-    doc.line(margin, y, pageW - margin, y);
-    y += 6;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text(`${r.typeIcon || "❗"} ${r.typeName || "Incident"}`, margin, y);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    const statusLabel = STATUS_LABELS[r.status] || r.status || "";
-    doc.text(`[${statusLabel}]`, pageW - margin, y, { align: "right" });
-    y += 6;
-
-    doc.setFontSize(9.5);
-    doc.setTextColor(90);
-    const home = reportAuthorHomeLocation(r);
-    doc.text(`📍 ${r.groupName || "Non précisé"}   ·   👤 ${reportAuthorDisplay(r)}${home ? ` (${home})` : ""}`, margin, y);
-    y += 5;
-    doc.text(`Créé le ${fmtDate(r.createdAt)}   ·   Dernière M.à.J. ${fmtDate(r.updatedAt)}`, margin, y);
-    y += 5;
-    doc.setTextColor(20);
-
-    if(r.comment){
-      const lines = doc.splitTextToSize(r.comment, pageW - margin * 2);
-      ensureSpace(lines.length * 4.6 + 2);
-      doc.setFontSize(10);
-      doc.text(lines, margin, y);
-      y += lines.length * 4.6 + 2;
+  const addPhotoRow = (photos) => {
+    if(!photos || photos.length === 0) return;
+    const thumbSize = 28;
+    const gap = 4;
+    ensureSpace(thumbSize + 4);
+    let x = margin + 4;
+    for(const photo of photos){
+      if(x + thumbSize > pageW - margin){ x = margin + 4; y += thumbSize + gap; ensureSpace(thumbSize + 4); }
+      try{
+        const format = photo.startsWith("data:image/png") ? "PNG" : "JPEG";
+        doc.addImage(photo, format, x, y, thumbSize, thumbSize, undefined, "FAST");
+      }catch(e){ console.error("PDF image error", e); }
+      x += thumbSize + gap;
     }
+    y += thumbSize + 5;
+  };
 
-    if(r.photos && r.photos.length > 0){
-      const thumbSize = 32;
-      const gap = 4;
-      ensureSpace(thumbSize + 4);
-      let x = margin;
-      for(const photo of r.photos){
-        if(x + thumbSize > pageW - margin){ x = margin; y += thumbSize + gap; ensureSpace(thumbSize + 4); }
-        try{
-          const format = photo.startsWith("data:image/png") ? "PNG" : "JPEG";
-          doc.addImage(photo, format, x, y, thumbSize, thumbSize, undefined, "FAST");
-        }catch(e){ console.error("PDF image error", e); }
-        x += thumbSize + gap;
+  const groups = groupReportsByType(reports);
+
+  for(const group of groups){
+    ensureSpace(14);
+    doc.setFillColor(235, 235, 235);
+    doc.rect(margin, y - 4.5, pageW - margin * 2, 8, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(20);
+    doc.text(`${group.name}  (${group.reports.length})`, margin + 2, y);
+    y += 9;
+
+    for(const r of group.reports){
+      ensureSpace(24);
+      doc.setDrawColor(220);
+      doc.line(margin, y, pageW - margin, y);
+      y += 6;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11.5);
+      doc.setTextColor(20);
+      doc.text(r.groupName || "Lieu non précisé", margin, y);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      const statusLabel = STATUS_LABELS[r.status] || r.status || "";
+      doc.text(`[${statusLabel}]`, pageW - margin, y, { align: "right" });
+      y += 6;
+
+      doc.setFontSize(9.5);
+      doc.setTextColor(90);
+      const home = reportAuthorHomeLocation(r);
+      doc.text(`Par : ${reportAuthorDisplay(r)}${home ? ` (${home})` : ""}`, margin, y);
+      y += 5;
+      doc.text(`Cree le ${fmtDate(r.createdAt)}  -  Derniere M.a.J. ${fmtDate(r.updatedAt)}`, margin, y);
+      y += 5;
+      doc.setTextColor(20);
+
+      if(r.comment){
+        const lines = doc.splitTextToSize(r.comment, pageW - margin * 2);
+        ensureSpace(lines.length * 4.6 + 2);
+        doc.setFontSize(10);
+        doc.text(lines, margin, y);
+        y += lines.length * 4.6 + 2;
       }
-      y += thumbSize + 6;
-    }else{
-      y += 3;
+      addPhotoRow(r.photos);
+
+      // Commentaires et changements de statut complémentaires, avec leurs
+      // propres photos éventuelles.
+      const history = historyByReport[r.id] || [];
+      for(const h of history){
+        const hasComment = h.comment && h.comment.trim();
+        const hasPhotos = h.photos && h.photos.length > 0;
+        if(!hasComment && !hasPhotos) continue;
+        ensureSpace(10);
+        doc.setFontSize(8.5);
+        doc.setTextColor(120);
+        const statusChange = h.fromStatus && h.fromStatus !== h.toStatus
+          ? ` - passage a "${STATUS_LABELS[h.toStatus] || h.toStatus}"` : "";
+        doc.text(`>> ${fmtDate(h.createdAt)} - ${reportAuthorDisplay(h)}${statusChange}`, margin + 4, y);
+        y += 4.2;
+        doc.setTextColor(30);
+        if(hasComment){
+          const hLines = doc.splitTextToSize(h.comment, pageW - margin * 2 - 6);
+          ensureSpace(hLines.length * 4.2 + 2);
+          doc.setFontSize(9);
+          doc.text(hLines, margin + 4, y);
+          y += hLines.length * 4.2 + 2;
+        }
+        if(hasPhotos) addPhotoRow(h.photos);
+      }
+
+      y += 2;
     }
   }
 
