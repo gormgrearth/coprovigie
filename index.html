@@ -2416,8 +2416,7 @@ function updateNotifButtonUI(){
   }
 }
 
-function notifyReportEvent(type, r){
-  if(!notifEnabled()) return;
+   async function notifyReportEvent(type, r){  if(!notifEnabled()) return;
   const isNew = type === "added";
   const title = isNew ? "Nouveau signalement" : "Signalement modifié";
   const statusLabel = STATUS_LABELS[r.status] || r.status || "";
