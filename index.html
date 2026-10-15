@@ -2422,16 +2422,16 @@ function notifyReportEvent(type, r){
   const title = isNew ? "Nouveau signalement" : "Signalement modifié";
   const statusLabel = STATUS_LABELS[r.status] || r.status || "";
   const body = `${r.typeName || "Incident"} · ${r.groupName || "Non précisé"}${isNew ? (r.authorId || r.author ? ` · par ${reportAuthorDisplay(r)}` : "") : ` · ${statusLabel}`}`;
-  try{
-    const n = new Notification(title, {
-      body,
-      icon: "favicon-192.png",
-      tag: "report-" + r.id, // évite d'empiler plusieurs notifs pour le même signalement
-    });
-    n.onclick = () => { window.focus(); n.close(); };
-  }catch(e){
-    console.error("notification error", e);
-  }
+   try{
+     const reg = await navigator.serviceWorker.ready;
+     reg.showNotification(title, {
+       body,
+       icon: "favicon-192.png",
+       tag: "report-" + r.id
+     });
+   }catch(e){
+     console.error("notification error", e);
+   }
 }
 
 
@@ -4075,5 +4075,10 @@ async function onSettingsPass(e){
   }
 }
 </script>
+    <script>
+   if ("serviceWorker" in navigator) {
+     window.addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
+   }
+   </script>
 </body>
 </html>
